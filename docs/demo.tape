@@ -27,6 +27,11 @@ Sleep 400ms
 Enter
 Sleep 2.5s
 
+Type "daypeek --demo week --compact"
+Sleep 400ms
+Enter
+Sleep 3.5s
+
 Ctrl+L
 Sleep 300ms
 Type "daypeek --demo"

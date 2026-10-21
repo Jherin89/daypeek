@@ -27,6 +27,8 @@ THEMES = {
 SHOTS = {
     "screenshot":           ("daypeek", ["--demo"], "dark"),
     "screenshot-compact":   ("daypeek --compact", ["--demo", "--compact"], "dark"),
+    "screenshot-week":      ("daypeek week", ["--demo", "week"], "dark"),
+    "screenshot-tomorrow":  ("daypeek tomorrow", ["--demo", "tomorrow"], "dark"),
     "screenshot-light":     ("daypeek", ["--demo"], "light"),
     "screenshot-offline":   ("daypeek   # wifi off", ["--demo", "--demo-offline"], "dark"),
     "screenshot-providers": ("daypeek providers", ["--demo", "providers"], "dark"),

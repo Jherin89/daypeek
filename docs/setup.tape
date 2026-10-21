@@ -6,14 +6,14 @@ Set Shell "bash"
 Set FontFamily "JetBrains Mono"
 Set FontSize 14
 Set Width 900
-Set Height 1000
+Set Height 1080
 Set Padding 18
 Set Theme "Catppuccin Mocha"
 Set TypingSpeed 40ms
 Set Framerate 15
 
 Hide
-Type `unset NO_COLOR FORCE_COLOR; export PATH="$PWD/target/release:$PATH" PS1='\[\e[32m\]❯\[\e[0m\] ' COLORTERM=truecolor; clear`
+Type `unset NO_COLOR FORCE_COLOR; export PATH="$PWD/target/release:$PATH" PS1='\[\e[32m\]❯\[\e[0m\] ' COLORTERM=truecolor TZ=America/New_York; clear`
 Enter
 Sleep 300ms
 Show
@@ -21,13 +21,8 @@ Show
 Type "daypeek --demo setup"
 Enter
 Sleep 1s
-# 1/4: Todoist, Things 3, Obsidian
-Space
-Sleep 200ms
-Down 5
-Space
-Sleep 200ms
-Down 2
+# 1/4: Things 3 and Obsidian are pre-ticked ("found"); add Todoist
+Sleep 800ms
 Space
 Sleep 600ms
 Enter
@@ -36,10 +31,9 @@ Sleep 600ms
 Type "0123456789abcdef0123456789abcdef"
 Enter
 Sleep 600ms
-# Obsidian vault + daily folder (defaults)
+# Obsidian vault + daily folder (the detected defaults)
 Enter
 Sleep 300ms
-Type "Daily"
 Enter
 Sleep 600ms
 # 2/4: one calendar
@@ -50,7 +44,8 @@ Enter
 Sleep 400ms
 Enter
 Sleep 600ms
-# 3/4: weather
+# 3/4: weather (suggested from the time zone; type your own to change it)
+Sleep 600ms
 Type "Evans, Georgia"
 Enter
 Sleep 400ms
