@@ -336,9 +336,9 @@ exact line to paste (for zsh: `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/
 open a new terminal afterwards. Or install with Homebrew instead.
 
 **Linux: `GLIBC_2.39 not found`.**
-The v0.1.0 Linux binary needs a recent glibc (Ubuntu 24.04 or newer). Newer
-releases ship a static build that runs on any distribution; until then, use
-`cargo install --git https://github.com/Jherin89/daypeek`.
+The v0.1.0 Linux binary needed a recent glibc (Ubuntu 24.04 or newer). From
+v0.2.0 on, Linux gets a static musl build that runs on any distribution:
+reinstall with the install script or `brew upgrade daypeek`.
 
 **`daypeek: config: … unknown field`.**
 There's a typo in your config. The message names the field and lists the valid

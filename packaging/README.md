@@ -9,9 +9,9 @@ brew install jherin89/tap/daypeek
 ```
 
 [`homebrew/daypeek.rb`](homebrew/daypeek.rb) is a copy of the tap's
-`Formula/daypeek.rb`, kept here for review. For v0.1.0 it installs the prebuilt
-binary on Apple Silicon Macs and x86_64 Linux, and builds the tagged source with
-Rust on Intel Macs and ARM Linux.
+`Formula/daypeek.rb`, kept here for review. It installs the prebuilt release
+binary on Apple Silicon Macs, Intel Macs and x86_64 Linux (static musl build), and
+builds the tagged source with Rust on ARM Linux.
 
 ### Updating the tap for a new release
 
@@ -19,10 +19,7 @@ Rust on Intel Macs and ARM Linux.
    [release workflow](../.github/workflows/release.yml) uploads
    `daypeek-<target>.tar.gz` and `daypeek-<target>.sha256` for
    `aarch64-apple-darwin`, `x86_64-apple-darwin` and `x86_64-unknown-linux-musl`.
-2. In the tap's `Formula/daypeek.rb`, point every `url` at the new tag. From the
-   first release that has them, switch Intel Macs (`on_macos`/`on_intel`) to the
-   `x86_64-apple-darwin` binary and Linux x86_64 to the static
-   `x86_64-unknown-linux-musl` binary, and drop their `depends_on "rust"`.
+2. In the tap's `Formula/daypeek.rb`, point every `url` at the new tag.
 3. Replace each `sha256` with the first field of the matching `.sha256` file:
 
    ```sh

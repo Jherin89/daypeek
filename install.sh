@@ -9,7 +9,7 @@
 #                 the first of ~/.local/bin, ~/bin, /usr/local/bin that is on
 #                 your PATH (and writable), else ~/.local/bin plus the exact
 #                 line to add it to your PATH
-#   --version V   install tag V (e.g. v0.1.0) instead of the latest release
+#   --version V   install tag V (e.g. v0.2.0) instead of the latest release
 #   --dry-run     show what would happen, change nothing
 #
 # Prebuilt binaries: macOS (Apple Silicon and Intel) and x86_64 Linux. Anything
@@ -118,7 +118,7 @@ if [ -z "$target" ]; then
   first=${targets%% *}
   warn "couldn't download $BIN-$first.tar.gz from the $VERSION release."
   if [ "$first" = "x86_64-apple-darwin" ]; then
-    say "    Intel Mac builds start with the release after v0.1.0. Until then,"
+    say "    Intel Mac binaries ship from v0.2.0 on. For an older release,"
     say "    Homebrew builds it for you:  brew install jherin89/tap/daypeek"
   fi
   say "    Releases: https://github.com/$REPO/releases"

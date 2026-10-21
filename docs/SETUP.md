@@ -41,10 +41,10 @@ brew install jherin89/tap/daypeek
 ```
 
 That adds the [jherin89/tap](https://github.com/Jherin89/homebrew-tap) tap and
-installs daypeek; `brew upgrade daypeek` updates it later. Apple Silicon Macs and
-x86_64 Linux get the prebuilt release binary. On Intel Macs, Homebrew builds the
-same release from source for now (it installs Rust for the build and takes a few
-minutes); Intel Mac binaries arrive with the next release.
+installs daypeek; `brew upgrade daypeek` updates it later. Apple Silicon Macs,
+Intel Macs and x86_64 Linux get the prebuilt release binary (nothing to compile).
+ARM Linux builds the same release from source (Homebrew installs Rust for the
+build and it takes a few minutes).
 
 ### Option B: one-line installer (macOS and Linux x86_64)
 
@@ -62,7 +62,7 @@ Choose the folder with `DAYPEEK_INSTALL_DIR`, or with options after `sh -s --`:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Jherin89/daypeek/main/install.sh | DAYPEEK_INSTALL_DIR=~/bin sh
-curl -fsSL https://raw.githubusercontent.com/Jherin89/daypeek/main/install.sh | sh -s -- --dir ~/bin --version v0.1.0
+curl -fsSL https://raw.githubusercontent.com/Jherin89/daypeek/main/install.sh | sh -s -- --dir ~/bin --version v0.2.0
 ```
 
 If there's no release for your platform yet, it prints the Cargo command from
@@ -73,11 +73,9 @@ Option D instead.
 1. Open [Releases](https://github.com/Jherin89/daypeek/releases) and download
    the file for your computer, along with its `.sha256` file:
    - Mac with an M-series chip: `daypeek-aarch64-apple-darwin.tar.gz`
-   - Intel Mac: `daypeek-x86_64-apple-darwin.tar.gz` (from the release after v0.1.0)
+   - Intel Mac: `daypeek-x86_64-apple-darwin.tar.gz`
    - Linux x86_64: `daypeek-x86_64-unknown-linux-musl.tar.gz`, a static build that
-     runs on any distribution (from the release after v0.1.0). v0.1.0 has
-     `daypeek-x86_64-unknown-linux-gnu.tar.gz`, which needs glibc 2.39 or newer
-     (Ubuntu 24.04+).
+     runs on any distribution
 2. Verify and unpack it:
 
    ```sh
@@ -129,7 +127,7 @@ cargo install daypeek
 
 Cargo puts the binary in `~/.cargo/bin`, which rustup adds to your `PATH`.
 
-✅ **Check:** `daypeek --version` prints `daypeek 0.1.0`.
+✅ **Check:** `daypeek --version` prints `daypeek 0.2.0`.
 
 ## 2. Try the demo
 
