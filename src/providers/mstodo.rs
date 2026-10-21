@@ -1,7 +1,7 @@
 //! Microsoft To Do via Microsoft Graph (`/me/todo/lists/{id}/tasks`).
 //!
 //! Bring your own Azure app registration (public client, no secret):
-//! `client_id` in config, then `today auth mstodo` prints a refresh token to
+//! `client_id` in config, then `daypeek auth mstodo` prints a refresh token to
 //! store in `$MSTODO_REFRESH_TOKEN` or the Keychain. A short-lived access token
 //! in `$MSTODO_ACCESS_TOKEN` also works (handy with `az account get-access-token`).
 
@@ -152,7 +152,7 @@ impl MsTodo {
 
     fn missing(&self) -> Error {
         Error::AuthMissing(format!(
-            "set ${} or client_id + ${} (run `today auth {}`)",
+            "set ${} or client_id + ${} (run `daypeek auth {}`)",
             self.s.access_token_env, self.s.refresh_token_env, self.id
         ))
     }

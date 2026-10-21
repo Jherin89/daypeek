@@ -10,7 +10,9 @@ use crate::http::enc;
 use crate::model::{Priority, Task};
 use crate::secrets;
 
-pub const TOKEN_ENV: &str = "TODOIST_API_TOKEN";
+pub const TOKEN_ENV: &str = "DAYPEEK_TODOIST_TOKEN";
+/// The conventional Todoist variable, accepted as a fallback.
+pub const FALLBACK_ENV: &str = "TODOIST_API_TOKEN";
 
 #[derive(Debug, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -101,11 +103,14 @@ pub fn to_tasks(page: Page, source: &str) -> Vec<Task> {
 
 impl Todoist {
     fn token(&self) -> Option<String> {
-        secrets::resolve(
-            &self.id,
-            "token",
-            &self.s.token_env,
-            self.s.token.as_deref(),
+        secrets::resolve(&self.id, "token", &self.s.token_env, None)
+            .or_else(|| secrets::resolve(&self.id, "token", FALLBACK_ENV, self.s.token.as_deref()))
+    }
+
+    fn hint(&self) -> String {
+        format!(
+            "{} (or ${FALLBACK_ENV})",
+            secrets::hint(&self.id, "token", &self.s.token_env)
         )
     }
 }
@@ -127,7 +132,7 @@ impl Provider for Todoist {
     fn check(&self) -> Result<()> {
         self.token()
             .map(|_| ())
-            .ok_or_else(|| Error::AuthMissing(secrets::hint(&self.id, "token", &self.s.token_env)))
+            .ok_or_else(|| Error::AuthMissing(self.hint()))
     }
 
     fn fetch(&self, ctx: &Ctx) -> Result<Output> {
@@ -184,14 +189,32 @@ mod tests {
     }
 
     #[test]
+    fn fallback_env_is_accepted() {
+        std::env::set_var("DAYPEEK_TEST_TODOIST_PRIMARY", "primary");
+        let p = Todoist {
+            id: "todoist-test-fallback".into(),
+            s: Settings {
+                token_env: "DAYPEEK_TEST_TODOIST_PRIMARY".into(),
+                ..Settings::default()
+            },
+        };
+        assert_eq!(p.token().as_deref(), Some("primary"));
+        std::env::remove_var("DAYPEEK_TEST_TODOIST_PRIMARY");
+        assert_eq!(TOKEN_ENV, "DAYPEEK_TODOIST_TOKEN");
+        assert_eq!(FALLBACK_ENV, "TODOIST_API_TOKEN");
+    }
+
+    #[test]
     fn missing_token_is_auth_missing() {
         let p = Todoist {
             id: "todoist-test-none".into(),
             s: Settings {
-                token_env: "TODAY_TEST_NO_SUCH_VAR".into(),
+                token_env: "DAYPEEK_TEST_NO_SUCH_VAR".into(),
                 ..Settings::default()
             },
         };
-        assert!(matches!(p.check(), Err(Error::AuthMissing(_))));
+        if std::env::var_os(FALLBACK_ENV).is_none() {
+            assert!(matches!(p.check(), Err(Error::AuthMissing(_))));
+        }
     }
 }

@@ -1,4 +1,4 @@
-//! Per-source "last known good" cache under `~/.cache/today/`.
+//! Per-source "last known good" cache under `~/.cache/daypeek/`.
 //!
 //! Every section goes through [`Cache::fetch`]: on success the result is
 //! written to disk, on failure the previous result (if any) is returned and

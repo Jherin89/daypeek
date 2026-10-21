@@ -7,16 +7,16 @@ use chrono::{DateTime, Utc};
 use clap::{Parser, Subcommand, ValueEnum};
 use colored::Colorize;
 
-use today::cache::Cache;
-use today::config::{self, Config};
-use today::http::Http;
-use today::providers::{self, Ctx, Health};
-use today::render::{self, Style};
-use today::{calendar, demo, oauth, secrets, snapshot, weather};
+use daypeek::cache::Cache;
+use daypeek::config::{self, Config};
+use daypeek::http::Http;
+use daypeek::providers::{self, Ctx, Health};
+use daypeek::render::{self, Style};
+use daypeek::{calendar, demo, oauth, secrets, snapshot, weather};
 
 /// A fast one-screen daily dashboard: calendar, tasks from every app, weather.
 #[derive(Parser)]
-#[command(name = "today", version, about, long_about = None)]
+#[command(name = "daypeek", version, about, long_about = None)]
 struct Cli {
     /// Short 2–3 line summary (for shell startup)
     #[arg(long, conflicts_with = "json")]
@@ -34,7 +34,11 @@ struct Cli {
     #[arg(long)]
     offline: bool,
 
-    /// Write a sample config to ~/.config/today/config.toml
+    /// With --demo: show the offline / stale-cache state
+    #[arg(long, requires = "demo", hide = true)]
+    demo_offline: bool,
+
+    /// Write a sample config to ~/.config/daypeek/config.toml
     #[arg(long)]
     init: bool,
 
@@ -42,7 +46,7 @@ struct Cli {
     #[arg(long, requires = "init")]
     force: bool,
 
-    /// Config file [default: ~/.config/today/config.toml, or $TODAY_CONFIG]
+    /// Config file [default: ~/.config/daypeek/config.toml, or $DAYPEEK_CONFIG]
     #[arg(long, value_name = "PATH", global = true)]
     config: Option<PathBuf>,
 
@@ -70,7 +74,8 @@ enum Command {
     Auth {
         /// Provider id from your config, e.g. `gtasks`
         provider: String,
-        /// Loopback port; register http://127.0.0.1:<port>/callback as the redirect URI
+        /// Loopback port. Redirect URI: http://127.0.0.1:<port>/callback
+        /// (Microsoft: http://localhost/callback)
         #[arg(long, default_value_t = 8765)]
         port: u16,
     },
@@ -97,7 +102,7 @@ fn main() -> ExitCode {
     match run(cli) {
         Ok(()) => ExitCode::SUCCESS,
         Err(msg) => {
-            eprintln!("today: {msg}");
+            eprintln!("daypeek: {msg}");
             ExitCode::FAILURE
         }
     }
@@ -125,12 +130,15 @@ fn run(cli: Cli) -> Result<(), String> {
         Ok(c) => c,
         Err(_) if cli.demo => Config::default(),
         Err(e) => {
-            eprintln!("today: {e} (using defaults)");
+            eprintln!("daypeek: {e} (using defaults)");
             Config::default()
         }
     };
 
     match cli.command {
+        Some(Command::Providers { json }) if cli.demo => {
+            return print_providers(demo::provider_rows(), json)
+        }
         Some(Command::Providers { json }) => return providers_cmd(&cfg, json),
         Some(Command::Auth { provider, port }) => return auth_cmd(&cfg, &provider, port),
         None => {}
@@ -138,7 +146,11 @@ fn run(cli: Cli) -> Result<(), String> {
 
     let snap = if cli.demo {
         let tz = snapshot::resolve_tz(&cfg);
-        demo::snapshot(now.with_timezone(&tz))
+        if cli.demo_offline {
+            demo::offline_snapshot(now.with_timezone(&tz))
+        } else {
+            demo::snapshot(now.with_timezone(&tz))
+        }
     } else {
         let cache = Cache::new(cfg.cache_dir(), cli.offline);
         snapshot::gather(&cfg, &cache, now)
@@ -180,7 +192,7 @@ fn init(path: &std::path::Path, force: bool) -> Result<(), String> {
     }
     std::fs::write(path, config::SAMPLE_CONFIG).map_err(|e| format!("{}: {e}", path.display()))?;
     println!("Wrote {}", path.display());
-    println!("Next: set $TODOIST_API_TOKEN (or edit the file), then run `today providers`.");
+    println!("Next: set $TODOIST_API_TOKEN (or another provider's credentials), then run `daypeek providers`.");
     Ok(())
 }
 
@@ -196,7 +208,7 @@ fn providers_cmd(cfg: &Config, json: bool) -> Result<(), String> {
     let (built, broken) = providers::build_all(cfg);
 
     // Health checks run in parallel, like the dashboard.
-    let mut rows: Vec<(String, String, String, Health)> = std::thread::scope(|s| {
+    let mut rows: Vec<Row> = std::thread::scope(|s| {
         let handles: Vec<_> = built
             .iter()
             .map(|p| {
@@ -245,6 +257,12 @@ fn providers_cmd(cfg: &Config, json: bool) -> Result<(), String> {
         rows.push(("weather".into(), "Open-Meteo".into(), "cloud".into(), h));
     }
 
+    print_providers(rows, json)
+}
+
+type Row = (String, String, String, Health);
+
+fn print_providers(rows: Vec<Row>, json: bool) -> Result<(), String> {
     if json {
         let v: Vec<_> = rows
             .iter()
@@ -257,7 +275,7 @@ fn providers_cmd(cfg: &Config, json: bool) -> Result<(), String> {
         return Ok(());
     }
     if rows.is_empty() {
-        println!("No providers configured. Run `today --init` to write a sample config.");
+        println!("No providers configured. Run `daypeek --init` to write a sample config.");
         return Ok(());
     }
     println!(
@@ -313,6 +331,7 @@ fn auth_cmd(cfg: &Config, id: &str, port: u16) -> Result<(), String> {
             extra: &[],
             basic_auth: true,
             pkce: false,
+            redirect_host: "127.0.0.1",
         },
         "mstodo" => oauth::Flow {
             provider: "Microsoft To Do",
@@ -322,6 +341,7 @@ fn auth_cmd(cfg: &Config, id: &str, port: u16) -> Result<(), String> {
             extra: &[("response_mode", "query")],
             basic_auth: false,
             pkce: true,
+            redirect_host: "localhost",
         },
         "gtasks" => oauth::Flow {
             provider: "Google Tasks",
@@ -331,10 +351,11 @@ fn auth_cmd(cfg: &Config, id: &str, port: u16) -> Result<(), String> {
             extra: &[("access_type", "offline"), ("prompt", "consent")],
             basic_auth: false,
             pkce: true,
+            redirect_host: "127.0.0.1",
         },
         other => {
             return Err(format!(
-                "`today auth` supports ticktick, mstodo, gtasks (not {other})"
+                "`daypeek auth` supports ticktick, mstodo, gtasks (not {other})"
             ))
         }
     };
@@ -369,7 +390,7 @@ fn auth_cmd(cfg: &Config, id: &str, port: u16) -> Result<(), String> {
     println!("  {value}\n");
     println!("Either export it from your shell profile:\n  export {env}='…'\n");
     println!(
-        "or, on macOS, keep it in the Keychain:\n  security add-generic-password -s {} -a \"$USER\" -w '…'",
+        "or, on macOS, keep it in the Keychain (it prompts for the value):\n  security add-generic-password -s {} -a \"$USER\" -w",
         secrets::keychain_service(id, name)
     );
     Ok(())

@@ -1,0 +1,57 @@
+name: Bug report
+description: Something in daypeek is broken or wrong
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! **Never paste tokens, refresh tokens, client secrets, or private calendar URLs.** Redact them as `…`.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you ran, what you expected, and what you saw instead.
+      placeholder: "`daypeek` shows ↻ cached for my Todoist tasks even though I'm online…"
+    validations:
+      required: true
+  - type: textarea
+    id: providers
+    attributes:
+      label: Output of `daypeek providers`
+      description: Redact anything private. Paste `--color never` output.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: daypeek version
+      description: Output of `daypeek --version`
+      placeholder: daypeek 0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options:
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Linux
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: install
+    attributes:
+      label: How did you install it?
+      placeholder: release binary / cargo install --git / from source
+  - type: textarea
+    id: config
+    attributes:
+      label: Relevant config (redacted)
+      description: Only the sections that matter. No secrets.
+      render: toml
+  - type: input
+    id: app
+    attributes:
+      label: App version (if a provider is involved)
+      description: e.g. Things 3.21, Obsidian 1.7, Tasks plugin 7.x

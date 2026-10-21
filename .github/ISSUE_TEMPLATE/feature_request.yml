@@ -1,0 +1,28 @@
+name: Feature request
+description: Suggest an improvement to daypeek
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: What are you trying to see or do at a glance?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like daypeek to do?
+      description: A mock of the output or the flag you imagine is great.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you've considered
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Fit
+      options:
+        - label: This keeps daypeek read-only and fast to start

@@ -1,9 +1,9 @@
 //! OAuth helpers for the bring-your-own-app providers (TickTick, Microsoft To
 //! Do, Google Tasks).
 //!
-//! `today` ships **no** client id or secret. You register your own app with the
+//! `daypeek` ships **no** client id or secret. You register your own app with the
 //! service, then either paste an access token into an env var, or run
-//! `today auth <provider>` once: it opens the consent page, catches the
+//! `daypeek auth <provider>` once: it opens the consent page, catches the
 //! redirect on `http://127.0.0.1:<port>/callback`, and prints the refresh
 //! token for *you* to store (env var or Keychain). Nothing is written to disk.
 
@@ -86,6 +86,9 @@ pub struct Flow {
     /// Send client credentials with HTTP Basic (TickTick) instead of the body.
     pub basic_auth: bool,
     pub pkce: bool,
+    /// `127.0.0.1` (Google, TickTick) or `localhost` (Microsoft: its portal
+    /// only accepts `http://localhost/...` loopback redirects).
+    pub redirect_host: &'static str,
 }
 
 fn random_token(bytes: usize) -> String {
@@ -102,7 +105,7 @@ pub fn loopback(
     client_secret: Option<&str>,
     port: u16,
 ) -> Result<TokenResponse> {
-    let redirect = format!("http://127.0.0.1:{port}/callback");
+    let redirect = format!("http://{}:{port}/callback", flow.redirect_host);
     let state = random_token(16);
     let verifier = random_token(48);
     let challenge = base64::engine::general_purpose::URL_SAFE_NO_PAD
@@ -128,7 +131,7 @@ pub fn loopback(
     let listener = TcpListener::bind(("127.0.0.1", port))
         .map_err(|e| Error::Config(format!("cannot listen on 127.0.0.1:{port}: {e}")))?;
     eprintln!(
-        "Open this URL to authorize today ({}):\n\n  {url}\n",
+        "Open this URL to authorize daypeek ({}):\n\n  {url}\n",
         flow.provider
     );
     open_browser(&url);
@@ -161,9 +164,9 @@ pub fn loopback(
 
     let ok = get("state").as_deref() == Some(state.as_str()) && get("code").is_some();
     let body = if ok {
-        "today: authorized. You can close this tab."
+        "daypeek: authorized. You can close this tab."
     } else {
-        "today: authorization failed. Check the terminal."
+        "daypeek: authorization failed. Check the terminal."
     };
     let _ = write!(
         stream,
@@ -188,7 +191,11 @@ pub fn loopback(
         form.push(("code_verifier", &verifier));
     }
     if flow.basic_auth {
+        // TickTick documents Basic auth *and* shows the credentials in the body;
+        // send both so either reading of the spec works.
         let secret = client_secret.unwrap_or_default();
+        form.push(("client_id", client_id));
+        form.push(("client_secret", secret));
         token_request(http, &flow.token_url, &form, Some((client_id, secret)))
     } else {
         form.push(("client_id", client_id));

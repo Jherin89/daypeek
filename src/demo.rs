@@ -9,7 +9,7 @@ use chrono_tz::Tz;
 
 use crate::calendar;
 use crate::model::{Freshness, NoteExcerpt, Priority, Sourced, Task, Weather};
-use crate::providers::{mdtasks, reminders, todoist};
+use crate::providers::{mdtasks, reminders, todoist, Health};
 use crate::snapshot::{DateInfo, Snapshot, SourceStatus};
 use crate::tasks;
 
@@ -29,7 +29,7 @@ fn demo_ics(today: NaiveDate, tz: Tz) -> String {
             "BEGIN:VEVENT\r\nUID:{uid}@demo\r\nSUMMARY:{title}\r\nDTSTART;TZID={tzid}:{t}T{start}00\r\nDTEND;TZID={tzid}:{t}T{end}00\r\n{extra}END:VEVENT\r\n"
         )
     };
-    let mut s = String::from("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//today//demo//EN\r\n");
+    let mut s = String::from("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//daypeek//demo//EN\r\n");
     s.push_str(&format!(
         "BEGIN:VEVENT\r\nUID:bday@demo\r\nSUMMARY:Mom's birthday\r\nDTSTART;VALUE=DATE:{}\r\nDTEND;VALUE=DATE:{}\r\nRRULE:FREQ=YEARLY\r\nEND:VEVENT\r\n",
         ymd(today.with_year_or(1961)),
@@ -111,7 +111,7 @@ fn demo_reminders(today: NaiveDate) -> String {
 }
 
 const DEMO_DAILY_NOTE: &str = "---\ntags: [daily]\n---\n# Today\n\
-Big rock: ship the first cut of `today` and write the README.\n\
+Big rock: ship the first cut of `daypeek` and write the README.\n\
 - [ ] Outline Augusta.rs lightning talk ⏫\n\
 Remember: dentist moved to next Thursday.\n";
 
@@ -196,6 +196,82 @@ pub fn snapshot(now: DateTime<Tz>) -> Snapshot {
         }),
         demo: true,
     }
+}
+
+/// The demo with the network "down": cloud sources show cached data.
+pub fn offline_snapshot(now: DateTime<Tz>) -> Snapshot {
+    let mut s = snapshot(now);
+    let stale = |mins: i64, error: &str| Freshness::Stale {
+        fetched_at: (now - Duration::minutes(mins)).to_utc(),
+        error: error.into(),
+    };
+    for c in &mut s.calendars {
+        c.freshness = stale(184, "network: could not resolve host");
+    }
+    for p in &mut s.providers {
+        if matches!(p.id.as_str(), "todoist" | "ticktick") {
+            p.freshness = stale(184, "network: could not resolve host");
+        }
+    }
+    if let Some(w) = &mut s.weather {
+        w.freshness = stale(184, "network: could not resolve host");
+    }
+    s
+}
+
+/// Fake `daypeek providers` rows for `daypeek --demo providers`.
+pub fn provider_rows() -> Vec<(String, String, String, Health)> {
+    let r = |id: &str, name: &str, kind: &str, h: Health| (id.into(), name.into(), kind.into(), h);
+    vec![
+        r(
+            "todoist",
+            "Todoist",
+            "cloud",
+            Health::Ok("4 tasks due".into()),
+        ),
+        r(
+            "ticktick",
+            "TickTick",
+            "cloud",
+            Health::Error("network: timed out".into()),
+        ),
+        r(
+            "mstodo",
+            "Microsoft To Do",
+            "cloud",
+            Health::AuthMissing("run `daypeek auth mstodo`".into()),
+        ),
+        r(
+            "things",
+            "Things 3",
+            "macos",
+            Health::Ok("1 task due".into()),
+        ),
+        r(
+            "reminders",
+            "Apple Reminders",
+            "macos",
+            Health::Ok("2 tasks due".into()),
+        ),
+        r(
+            "obsidian",
+            "Obsidian",
+            "local",
+            Health::Ok("1 task due + daily note".into()),
+        ),
+        r(
+            "Personal",
+            "iCal calendar",
+            "cloud",
+            Health::Ok("7 events today".into()),
+        ),
+        r(
+            "weather",
+            "Open-Meteo",
+            "cloud",
+            Health::Ok("68°F Partly cloudy".into()),
+        ),
+    ]
 }
 
 #[cfg(test)]

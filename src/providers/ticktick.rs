@@ -1,7 +1,7 @@
 //! TickTick via the official Open API (`api.ticktick.com/open/v1`).
 //!
 //! Register an app at <https://developer.ticktick.com/manage>, then run
-//! `today auth ticktick` (or paste an access token into `$TICKTICK_ACCESS_TOKEN`).
+//! `daypeek auth ticktick` (or paste an access token into `$TICKTICK_ACCESS_TOKEN`).
 //! TickTick access tokens are long-lived (about six months).
 
 use chrono::{DateTime, NaiveDate};
@@ -20,7 +20,7 @@ pub const TOKEN_ENV: &str = "TICKTICK_ACCESS_TOKEN";
 pub struct Settings {
     pub token: Option<String>,
     pub token_env: String,
-    /// Your TickTick app's client id (only used by `today auth ticktick`).
+    /// Your TickTick app's client id (only used by `daypeek auth ticktick`).
     pub client_id: Option<String>,
     /// Project names to include; empty = inbox + every open project.
     pub projects: Vec<String>,
@@ -146,7 +146,7 @@ impl Provider for TickTick {
     fn check(&self) -> Result<()> {
         self.token().map(|_| ()).ok_or_else(|| {
             Error::AuthMissing(format!(
-                "{} (or run `today auth ticktick`)",
+                "{} (or run `daypeek auth ticktick`)",
                 secrets::hint(&self.id, "token", &self.s.token_env)
             ))
         })

@@ -1,0 +1,45 @@
+name: New provider request
+description: Ask for daypeek to read tasks or events from another app
+title: "Provider: <app name>"
+labels: ["provider", "enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        daypeek only uses **official, documented APIs or local files** that the user owns. No scraping, no private APIs, no shared client secrets. Planned so far: Asana, Trello, Linear, ClickUp, Logseq, Bear.
+  - type: input
+    id: app
+    attributes:
+      label: App
+      placeholder: e.g. Linear
+    validations:
+      required: true
+  - type: input
+    id: docs
+    attributes:
+      label: Link to the official API or file-format docs
+      placeholder: https://…
+    validations:
+      required: true
+  - type: dropdown
+    id: access
+    attributes:
+      label: How would daypeek read it?
+      options:
+        - Personal API token / API key
+        - OAuth (user registers their own app)
+        - Local file or database
+        - macOS automation (AppleScript/JXA/Shortcuts)
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: mapping
+    attributes:
+      label: What counts as "due today", and how do priorities work in this app?
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Contributing
+      options:
+        - label: I'd like to implement this myself (see CONTRIBUTING.md)

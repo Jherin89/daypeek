@@ -3,7 +3,7 @@
 //! Bring your own Google Cloud OAuth client ("Desktop app" type). Google
 //! requires the client secret even for desktop apps; it is *your* secret, so
 //! keep it in `$GTASKS_CLIENT_SECRET` or the Keychain, never in the repo. Run
-//! `today auth gtasks` once to get a refresh token for `$GTASKS_REFRESH_TOKEN`.
+//! `daypeek auth gtasks` once to get a refresh token for `$GTASKS_REFRESH_TOKEN`.
 
 use serde::Deserialize;
 
@@ -100,7 +100,7 @@ pub fn to_tasks(tasks: Vec<ApiTask>, list: &str, source: &str) -> Vec<Task> {
 impl GTasks {
     fn missing(&self) -> Error {
         Error::AuthMissing(format!(
-            "set ${} or client_id + ${} + ${} (run `today auth {}`)",
+            "set ${} or client_id + ${} + ${} (run `daypeek auth {}`)",
             self.s.access_token_env, self.s.client_secret_env, self.s.refresh_token_env, self.id
         ))
     }

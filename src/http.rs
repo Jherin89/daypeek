@@ -8,9 +8,9 @@ use serde::de::DeserializeOwned;
 use crate::error::{Error, Result};
 
 const USER_AGENT: &str = concat!(
-    "today/",
+    "daypeek/",
     env!("CARGO_PKG_VERSION"),
-    " (+https://github.com/Jherin89/today)"
+    " (+https://github.com/Jherin89/daypeek)"
 );
 
 #[derive(Clone)]

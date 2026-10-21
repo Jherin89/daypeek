@@ -1,4 +1,4 @@
-// today — Apple Reminders bridge (JXA). Run by `osascript -l JavaScript`.
+// daypeek — Apple Reminders bridge (JXA). Run by `osascript -l JavaScript`.
 // Prints a JSON array of open reminders that have a due date on or before
 // today. Arguments (optional) are list names to include.
 // Read-only: it never modifies a reminder.

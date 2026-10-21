@@ -1,7 +1,8 @@
 //! Notion: a database with a title, a date, and a "done" property.
 //!
-//! Create an internal integration at <https://www.notion.so/my-integrations>,
-//! share the database with it, and put the secret in `$NOTION_TOKEN`.
+//! Create an internal connection in Notion's developer portal
+//! (<https://developers.notion.com/guides/get-started/internal-connections>),
+//! give it access to the database, and put its API token in `$NOTION_TOKEN`.
 //! Property names are configurable because every task database is different.
 
 use serde::Deserialize;

@@ -59,7 +59,7 @@ impl Output {
     }
 }
 
-/// Result of `today providers`.
+/// Result of `daypeek providers`.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case", tag = "status", content = "detail")]
 pub enum Health {
@@ -87,7 +87,7 @@ pub trait Provider: Send + Sync {
     /// Fetch open tasks due today or overdue (and undated ones if configured).
     fn fetch(&self, ctx: &Ctx) -> Result<Output>;
 
-    /// Full health check used by `today providers`.
+    /// Full health check used by `daypeek providers`.
     fn health(&self, ctx: &Ctx) -> Health {
         if let Err(e) = self.check() {
             return health_from_error(e);
@@ -138,7 +138,7 @@ pub const REGISTRY: &[(&str, &str, Kind, Builder)] = &[
     ("markdown", "Markdown", Kind::Local, markdown::build),
 ];
 
-/// A provider that failed to build (bad config); still listed by `today providers`.
+/// A provider that failed to build (bad config); still listed by `daypeek providers`.
 pub struct Broken {
     pub id: String,
     pub error: Error,

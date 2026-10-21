@@ -1,4 +1,4 @@
-//! `today` — a fast one-screen daily dashboard for the terminal.
+//! `daypeek` — a fast one-screen daily dashboard for the terminal.
 //!
 //! The binary is a thin CLI over this library: [`snapshot::gather`] fetches
 //! every configured source concurrently (with per-source caching), and

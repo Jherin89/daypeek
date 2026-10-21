@@ -226,7 +226,7 @@ pub fn full(s: &Snapshot, st: &Style) -> String {
             out.push(format!(
                 "    {}",
                 format!(
-                    "… and {} more (today --json for all)",
+                    "… and {} more (daypeek --json for all)",
                     s.tasks.len() - st.max_tasks
                 )
                 .dimmed()
@@ -284,7 +284,7 @@ pub fn full(s: &Snapshot, st: &Style) -> String {
         out.push(String::new());
         out.push(format!(
             "    {}",
-            "No sources configured yet. Run `today --init`, or try `today --demo`.".dimmed()
+            "No sources configured yet. Run `daypeek --init`, or try `daypeek --demo`.".dimmed()
         ));
     }
     out.push(String::new());

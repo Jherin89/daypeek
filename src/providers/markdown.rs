@@ -20,7 +20,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Settings {
-            paths: vec!["~/.config/today/tasks.md".into()],
+            paths: vec!["~/.config/daypeek/tasks.md".into()],
             include_undated: true,
         }
     }

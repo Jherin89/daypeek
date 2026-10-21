@@ -1,24 +1,25 @@
-//! End-to-end tests of the `today` binary.
+//! End-to-end tests of the `daypeek` binary.
 
 use std::process::Command;
 
 const AT: &str = "2026-10-21T10:58:00-04:00";
 
-fn today() -> Command {
-    let mut c = Command::new(env!("CARGO_BIN_EXE_today"));
+fn daypeek() -> Command {
+    let mut c = Command::new(env!("CARGO_BIN_EXE_daypeek"));
     // Isolate from the developer's real config, cache, and tokens.
-    let dir = std::env::temp_dir().join(format!("today-cli-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("daypeek-cli-{}", std::process::id()));
     c.env("HOME", &dir)
         .env("XDG_CONFIG_HOME", dir.join("config"))
         .env("XDG_CACHE_HOME", dir.join("cache"))
-        .env_remove("TODAY_CONFIG")
+        .env_remove("DAYPEEK_CONFIG")
         .env_remove("TODOIST_API_TOKEN")
+        .env_remove("DAYPEEK_TODOIST_TOKEN")
         .env("TZ", "America/New_York");
     c
 }
 
 fn run(args: &[&str]) -> (bool, String, String) {
-    let out = today().args(args).output().expect("run today");
+    let out = daypeek().args(args).output().expect("run daypeek");
     (
         out.status.success(),
         String::from_utf8_lossy(&out.stdout).into_owned(),
@@ -204,7 +205,7 @@ fn broken_config_warns_but_renders() {
 
 #[test]
 fn providers_subcommand_reports_status() {
-    let dir = fixture_config("[providers.todoist]\ntoken_env = \"TODAY_CLI_TEST_UNSET\"\n");
+    let dir = fixture_config("[providers.todoist]\ntoken_env = \"DAYPEEK_CLI_TEST_UNSET\"\n");
     let cfg = dir.path().join("config.toml");
     let (ok, out, _) = run(&["--config", cfg.to_str().unwrap(), "providers", "--json"]);
     assert!(ok);
@@ -224,4 +225,27 @@ fn providers_subcommand_reports_status() {
     assert_eq!(status("todo"), "ok");
     assert_eq!(status("todoist"), "auth_missing");
     assert_eq!(status("Fixture"), "ok");
+}
+
+#[test]
+fn demo_providers_and_offline_variants() {
+    let (ok, out, _) = run(&["--demo", "--color", "never", "providers"]);
+    assert!(ok);
+    assert!(
+        out.contains("todoist") && out.contains("auth missing"),
+        "{out}"
+    );
+
+    let (ok, out, _) = run(&["--demo", "--color", "never", "providers", "--json"]);
+    assert!(ok);
+    let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+    assert!(v.as_array().unwrap().len() >= 5);
+
+    let (ok, out, _) = run(&["--demo", "--demo-offline", "--color", "never", "--at", AT]);
+    assert!(ok);
+    assert!(out.contains("cached 3h 04m ago"), "{out}");
+    assert!(out.contains("Submit expense report"));
+
+    let (ok, _, err) = run(&["--demo-offline"]);
+    assert!(!ok, "--demo-offline requires --demo: {err}");
 }

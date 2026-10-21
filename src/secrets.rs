@@ -1,12 +1,12 @@
 //! Credential lookup: environment variable → macOS Keychain → config file.
 //!
-//! `today` never ships, logs, or caches secrets. On macOS a secret can live in
+//! `daypeek` never ships, logs, or caches secrets. On macOS a secret can live in
 //! the login Keychain as a generic password whose *service* is
-//! `today-<provider>` (or `today-<provider>-<name>` for secondary values like
+//! `daypeek-<provider>` (or `daypeek-<provider>-<name>` for secondary values like
 //! refresh tokens):
 //!
 //! ```sh
-//! security add-generic-password -s today-todoist -a "$USER" -w
+//! security add-generic-password -s daypeek-todoist -a "$USER" -w
 //! ```
 
 /// Resolve a secret for provider instance `instance`.
@@ -33,9 +33,9 @@ pub fn resolve(instance: &str, name: &str, env_var: &str, inline: Option<&str>) 
 /// Keychain service name for a secret.
 pub fn keychain_service(instance: &str, name: &str) -> String {
     if name == "token" {
-        format!("today-{instance}")
+        format!("daypeek-{instance}")
     } else {
-        format!("today-{instance}-{}", name.replace('_', "-"))
+        format!("daypeek-{instance}-{}", name.replace('_', "-"))
     }
 }
 
@@ -77,32 +77,32 @@ mod tests {
 
     #[test]
     fn keychain_service_names() {
-        assert_eq!(keychain_service("todoist", "token"), "today-todoist");
+        assert_eq!(keychain_service("todoist", "token"), "daypeek-todoist");
         assert_eq!(
             keychain_service("gtasks", "refresh_token"),
-            "today-gtasks-refresh-token"
+            "daypeek-gtasks-refresh-token"
         );
     }
 
     #[test]
     fn env_beats_inline() {
         // Unique var name so parallel tests don't collide.
-        std::env::set_var("TODAY_TEST_SECRET_A", "from-env");
+        std::env::set_var("DAYPEEK_TEST_SECRET_A", "from-env");
         assert_eq!(
-            resolve("x", "token", "TODAY_TEST_SECRET_A", Some("inline")).as_deref(),
+            resolve("x", "token", "DAYPEEK_TEST_SECRET_A", Some("inline")).as_deref(),
             Some("from-env")
         );
-        std::env::remove_var("TODAY_TEST_SECRET_A");
+        std::env::remove_var("DAYPEEK_TEST_SECRET_A");
     }
 
     #[test]
     fn inline_is_fallback_and_blank_is_none() {
         assert_eq!(
-            resolve("nope-zz", "token", "TODAY_TEST_SECRET_UNSET", Some(" t ")).as_deref(),
+            resolve("nope-zz", "token", "DAYPEEK_TEST_SECRET_UNSET", Some(" t ")).as_deref(),
             Some("t")
         );
         assert_eq!(
-            resolve("nope-zz", "token", "TODAY_TEST_SECRET_UNSET", Some("  ")),
+            resolve("nope-zz", "token", "DAYPEEK_TEST_SECRET_UNSET", Some("  ")),
             None
         );
     }

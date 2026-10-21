@@ -37,9 +37,9 @@ jobs:
       - name: Package
         shell: bash
         run: |
-          STAGE=today-${{ matrix.target }}
+          STAGE=daypeek-${{ matrix.target }}
           mkdir -p dist/$STAGE
-          cp target/${{ matrix.target }}/release/today dist/$STAGE/
+          cp target/${{ matrix.target }}/release/daypeek dist/$STAGE/
           cp README.md LICENSE dist/$STAGE/
           tar -C dist -czf dist/$STAGE.tar.gz $STAGE
           if command -v shasum >/dev/null; then
@@ -53,5 +53,5 @@ jobs:
         with:
           generate_release_notes: true
           files: |
-            dist/today-${{ matrix.target }}.tar.gz
-            dist/today-${{ matrix.target }}.sha256
+            dist/daypeek-${{ matrix.target }}.tar.gz
+            dist/daypeek-${{ matrix.target }}.sha256

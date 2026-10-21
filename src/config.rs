@@ -1,4 +1,4 @@
-//! `~/.config/today/config.toml`: loading, defaults, and the `--init` sample.
+//! `~/.config/daypeek/config.toml`: loading, defaults, and the `--init` sample.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -29,7 +29,7 @@ pub struct General {
     pub time_format: TimeFormat,
     /// Per-request network timeout.
     pub timeout_secs: u64,
-    /// Override for `~/.cache/today`.
+    /// Override for `~/.cache/daypeek`.
     pub cache_dir: Option<String>,
     /// Max tasks shown in the full view (JSON always has everything).
     pub max_tasks: usize,
@@ -143,10 +143,10 @@ pub fn expand_tilde(p: &str) -> PathBuf {
     PathBuf::from(p)
 }
 
-/// `$TODAY_CONFIG`, else `$XDG_CONFIG_HOME/today/config.toml`, else
-/// `~/.config/today/config.toml` (also on macOS, on purpose: dotfile-friendly).
+/// `$DAYPEEK_CONFIG`, else `$XDG_CONFIG_HOME/daypeek/config.toml`, else
+/// `~/.config/daypeek/config.toml` (also on macOS, on purpose: dotfile-friendly).
 pub fn default_config_path() -> PathBuf {
-    if let Some(p) = std::env::var_os("TODAY_CONFIG").filter(|p| !p.is_empty()) {
+    if let Some(p) = std::env::var_os("DAYPEEK_CONFIG").filter(|p| !p.is_empty()) {
         return PathBuf::from(p);
     }
     let base = std::env::var_os("XDG_CONFIG_HOME")
@@ -154,7 +154,7 @@ pub fn default_config_path() -> PathBuf {
         .map(PathBuf::from)
         .or_else(|| home().map(|h| h.join(".config")))
         .unwrap_or_else(|| PathBuf::from("."));
-    base.join("today").join("config.toml")
+    base.join("daypeek").join("config.toml")
 }
 
 pub fn default_cache_dir() -> Option<PathBuf> {
@@ -162,13 +162,13 @@ pub fn default_cache_dir() -> Option<PathBuf> {
         .filter(|p| !p.is_empty())
         .map(PathBuf::from)
         .or_else(|| home().map(|h| h.join(".cache")))
-        .map(|b| b.join("today"))
+        .map(|b| b.join("daypeek"))
 }
 
-/// Written by `today --init`. Must always parse (see tests).
-pub const SAMPLE_CONFIG: &str = r#"# today — config. Docs: https://github.com/Jherin89/today#configuration
+/// Written by `daypeek --init`. Must always parse (see tests).
+pub const SAMPLE_CONFIG: &str = r#"# daypeek — config. Setup guide: https://github.com/Jherin89/daypeek/blob/main/docs/SETUP.md
 # Secrets never belong in this file if you can avoid it: prefer env vars or
-# the macOS Keychain (see README "Credentials").
+# the macOS Keychain (see docs/SETUP.md, "Credentials").
 
 [general]
 # timezone = "America/New_York"   # default: system time zone
@@ -199,10 +199,10 @@ units = "imperial"                 # or "metric"
 
 [providers.todoist]
 # Token from Todoist → Settings → Integrations → Developer.
-# Read from $TODOIST_API_TOKEN, or Keychain item "today-todoist".
+# Read from $DAYPEEK_TODOIST_TOKEN or $TODOIST_API_TOKEN, or Keychain item "daypeek-todoist".
 filter = "today | overdue"
 
-# [providers.ticktick]            # $TICKTICK_ACCESS_TOKEN  (see `today auth ticktick`)
+# [providers.ticktick]            # $TICKTICK_ACCESS_TOKEN  (see `daypeek auth ticktick`)
 # projects = []                   # empty = inbox + all projects
 
 # [providers.mstodo]              # Microsoft To Do via Graph
@@ -210,7 +210,7 @@ filter = "today | overdue"
 
 # [providers.gtasks]              # Google Tasks
 # client_id = "....apps.googleusercontent.com"
-# # $GTASKS_CLIENT_SECRET and $GTASKS_REFRESH_TOKEN (see `today auth gtasks`)
+# # $GTASKS_CLIENT_SECRET and $GTASKS_REFRESH_TOKEN (see `daypeek auth gtasks`)
 
 # [providers.things]              # Things 3 (macOS, read-only)
 

@@ -1,4 +1,4 @@
--- The subset of the Things 3 schema that `today` reads (Things 3.13+).
+-- The subset of the Things 3 schema that `daypeek` reads (current Things 3 releases).
 CREATE TABLE TMArea (uuid TEXT PRIMARY KEY, title TEXT);
 CREATE TABLE TMTask (
     uuid TEXT PRIMARY KEY,

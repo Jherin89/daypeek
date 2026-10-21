@@ -1,4 +1,4 @@
-# Contributing to today
+# Contributing to daypeek
 
 Thanks for helping! The most useful contribution is usually a **new task
 provider**. Here's how to add one.
@@ -46,14 +46,25 @@ pub trait Provider: Send + Sync {
 8. **Tests.** Save a realistic, anonymized response in
    `tests/fixtures/<name>_*.json` and test your pure parser against it. Cover
    priorities, done items being skipped, undated items, and dates near midnight.
-9. **Docs.** Add a row to the "Supported apps" and "Provider reference" tables
-   in the README, and a commented block to `SAMPLE_CONFIG` in `src/config.rs`.
+9. **Docs.** Add a row to the "Supported apps" table in the README, a numbered
+   setup section to [`docs/SETUP.md`](docs/SETUP.md) that links the app's
+   official docs, a commented block to `SAMPLE_CONFIG` in `src/config.rs`,
+   and a line under "Unreleased" in [`CHANGELOG.md`](CHANGELOG.md).
+
+## Running locally
+
+```sh
+cargo run -- --demo                  # fake data, no config needed
+cargo run -- --config ./my.toml      # a scratch config
+cargo run -- providers               # health check for whatever you configured
+python3 scripts/screenshot.py        # re-render the README screenshots (needs Chrome + jq)
+```
 
 ## Ground rules
 
 - `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, and `cargo test`
   must pass (CI checks all three).
-- Read-only access only. `today` never modifies your tasks, notes, or
+- Read-only access only. `daypeek` never modifies your tasks, notes, or
   calendars.
 - No scraping, no private APIs, no bundled credentials.
 - Fixtures must be fake data.

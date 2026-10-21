@@ -8,9 +8,9 @@ Set Height 760
 Set Theme "Catppuccin Mocha"
 Set TypingSpeed 60ms
 
-Type "today --demo --compact"
+Type "daypeek --demo --compact"
 Enter
 Sleep 2s
-Type "today --demo"
+Type "daypeek --demo"
 Enter
 Sleep 5s

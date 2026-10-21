@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Setup guide
+    url: https://github.com/Jherin89/daypeek/blob/main/docs/SETUP.md
+    about: Step-by-step setup for every provider, calendars, and weather.
+  - name: Troubleshooting and FAQ
+    url: https://github.com/Jherin89/daypeek/blob/main/docs/USAGE.md#troubleshooting-and-faq
+    about: Auth missing, stale cache, Reminders permissions, Gatekeeper, and more.
