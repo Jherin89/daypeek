@@ -6,9 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-21
+
 ### Added
 
-- First release, `v0.1.0`, not yet tagged.
+- First release.
 - One-screen dashboard: date header, today's calendar, merged tasks, weather,
   and a daily-note excerpt. `--compact` for shell startup, `--json` for scripts.
 - Calendars from any iCal feed (`https://`, `webcal://`, local files), with
@@ -35,4 +37,5 @@ All notable changes to this project are documented here. The format follows
 - CI (Ubuntu and macOS) and a release workflow for `aarch64-apple-darwin` and
   `x86_64-unknown-linux-gnu`.
 
-[Unreleased]: https://github.com/Jherin89/daypeek/commits/main
+[Unreleased]: https://github.com/Jherin89/daypeek/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/Jherin89/daypeek/releases/tag/v0.1.0
