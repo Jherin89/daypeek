@@ -4,10 +4,13 @@ This takes you from nothing to `daypeek` running every time you open a
 terminal. **Most people only need three commands:**
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Jherin89/daypeek/main/install.sh | sh
+brew install jherin89/tap/daypeek     # or: curl -fsSL https://raw.githubusercontent.com/Jherin89/daypeek/main/install.sh | sh
 daypeek --demo
 daypeek setup
 ```
+
+On a Mac that has Things 3 or Obsidian, plain `daypeek` already shows those
+tasks before you set anything up ([details](#no-config-yet-on-a-mac)).
 
 The rest of this page covers the details and the manual alternative. You only
 need the sections for apps you actually use.
@@ -29,23 +32,52 @@ need the sections for apps you actually use.
 
 ## 1. Install
 
-### Option A: one-line installer (macOS Apple Silicon or Linux x86_64)
+### Option A: Homebrew (macOS and Linux)
+
+If you use [Homebrew](https://brew.sh):
+
+```sh
+brew install jherin89/tap/daypeek
+```
+
+That adds the [jherin89/tap](https://github.com/Jherin89/homebrew-tap) tap and
+installs daypeek; `brew upgrade daypeek` updates it later. Apple Silicon Macs and
+x86_64 Linux get the prebuilt release binary. On Intel Macs, Homebrew builds the
+same release from source for now (it installs Rust for the build and takes a few
+minutes); Intel Mac binaries arrive with the next release.
+
+### Option B: one-line installer (macOS and Linux x86_64)
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Jherin89/daypeek/main/install.sh | sh
 ```
 
-The [script](../install.sh) downloads the latest release for your platform,
-checks its SHA-256, installs to `~/.local/bin` (or `/usr/local/bin`), and tells
-you if that folder isn't on your `PATH`. Options go after `sh -s --`, for
-example `… | sh -s -- --dir ~/bin` or `--version v0.1.0`. If there's no release
-for your platform yet, it prints the Cargo command from Option C instead.
+The [script](../install.sh) downloads the latest release for your platform and
+checks its SHA-256. It installs into the first of `~/.local/bin`, `~/bin` or
+`/usr/local/bin` that's already on your `PATH`. If none is (common on a new
+Mac), it uses `~/.local/bin` and prints the exact one line to paste to fix your
+`PATH`, plus next steps that work before you do.
 
-### Option B: download the binary yourself
+Choose the folder with `DAYPEEK_INSTALL_DIR`, or with options after `sh -s --`:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Jherin89/daypeek/main/install.sh | DAYPEEK_INSTALL_DIR=~/bin sh
+curl -fsSL https://raw.githubusercontent.com/Jherin89/daypeek/main/install.sh | sh -s -- --dir ~/bin --version v0.1.0
+```
+
+If there's no release for your platform yet, it prints the Cargo command from
+Option D instead.
+
+### Option C: download the binary yourself
 
 1. Open [Releases](https://github.com/Jherin89/daypeek/releases) and download
-   `daypeek-aarch64-apple-darwin.tar.gz` (Mac with an M-series chip) or
-   `daypeek-x86_64-unknown-linux-gnu.tar.gz` (Linux), along with its `.sha256` file.
+   the file for your computer, along with its `.sha256` file:
+   - Mac with an M-series chip: `daypeek-aarch64-apple-darwin.tar.gz`
+   - Intel Mac: `daypeek-x86_64-apple-darwin.tar.gz` (from the release after v0.1.0)
+   - Linux x86_64: `daypeek-x86_64-unknown-linux-musl.tar.gz`, a static build that
+     runs on any distribution (from the release after v0.1.0). v0.1.0 has
+     `daypeek-x86_64-unknown-linux-gnu.tar.gz`, which needs glibc 2.39 or newer
+     (Ubuntu 24.04+).
 2. Verify and unpack it:
 
    ```sh
@@ -69,7 +101,7 @@ for your platform yet, it prints the Cargo command from Option C instead.
    xattr -d com.apple.quarantine ~/.local/bin/daypeek
    ```
 
-### Option C: build with Cargo
+### Option D: build with Cargo
 
 You need Rust 1.85 or newer. If you don't have Rust yet, install it with
 [rustup](https://rustup.rs):
@@ -104,6 +136,8 @@ Cargo puts the binary in `~/.cargo/bin`, which rustup adds to your `PATH`.
 ```sh
 daypeek --demo              # full dashboard with fake data
 daypeek --demo --compact    # the 3-line version
+daypeek --demo tomorrow     # tomorrow
+daypeek --demo week         # the next seven days
 daypeek --demo --json       # machine-readable
 daypeek --demo providers    # what the health check looks like
 ```
@@ -122,7 +156,10 @@ daypeek setup
 
 It takes about a minute:
 
-1. **Pick your apps** from a checklist (Space selects, Enter continues).
+1. **Pick your apps** from a checklist: press **Space** to tick an app, **Enter**
+   to continue. Apps found on this Mac (Things 3, your Obsidian vault) are
+   already ticked. If you press Enter with nothing ticked, it asks once more;
+   press Enter again to skip task apps.
 2. **For each app**, it shows one line on where to get the credential, plus a
    link to the official docs, then asks for it:
    - Tokens are typed with **hidden input**. On macOS they're saved straight to
@@ -131,10 +168,13 @@ It takes about a minute:
    - TickTick, Microsoft To Do, and Google Tasks ask for your app's client ID
      and then offer to **sign in in your browser**. The resulting token is stored
      the same way.
-   - Obsidian, todo.txt, and Markdown just ask for a path. Things and Reminders
-     need nothing.
+   - Obsidian, todo.txt, and Markdown just ask for a path (a detected vault,
+     with its daily-notes folder and date format, is the default). Things and
+     Reminders need nothing.
 3. **Calendars:** paste one or more iCal links ([where to find them](#calendars)).
-4. **Weather:** type your city, or press Enter to skip.
+4. **Weather:** it suggests a city from your time zone (for example *New York*
+   for `America/New_York`). Press Enter to keep it, type your own city, or type
+   `none` to skip weather.
 5. It writes `~/.config/daypeek/config.toml` (readable only by you, with any old
    file kept as `config.toml.bak`) and runs the [health check](#4-connect-your-apps).
 
@@ -142,15 +182,32 @@ It takes about a minute:
 anything. Run `daypeek setup` again any time to change your setup. If it's not
 in a terminal (in a script, say), it exits with a hint instead of hanging.
 
+### No config yet on a Mac?
+
+With no config file at all, `daypeek` looks for apps that keep their data on
+your Mac and uses them right away:
+
+- **Things 3**: its local database (opened read-only).
+- **Obsidian**: the vault you used most recently, from Obsidian's own vault
+  list (`~/Library/Application Support/obsidian/obsidian.json`), including the
+  daily-notes folder and date format you set in Obsidian.
+
+You'll see a line like *"Found Things 3 and Obsidian (Main) on this Mac"* under
+the dashboard. Nothing is written to disk; run `daypeek setup` to add calendars
+and weather and save a config. On Linux nothing is auto-detected, and `daypeek`
+points you to `daypeek setup`.
+
 ### Or write the config by hand
 
 ```sh
 daypeek --init
 ```
 
-This writes a commented starter file to `~/.config/daypeek/config.toml`
-(the same place on macOS and Linux, so it can live with your dotfiles). If a
-config already exists, `--init` refuses to overwrite it unless you add `--force`.
+This writes a starter file to `~/.config/daypeek/config.toml` (the same place
+on macOS and Linux, so it can live with your dotfiles). Everything in it is
+commented out, so nothing turns on until you uncomment it, and the file is
+readable only by you. If a config already exists, `--init` refuses to
+overwrite it unless you add `--force` (the old one is kept as `config.toml.bak`).
 The `--config <path>` flag or the `DAYPEEK_CONFIG` env var point `daypeek` at a
 different file. `$XDG_CONFIG_HOME` is also honored.
 
@@ -162,6 +219,7 @@ timezone = "America/New_York"   # default: your system time zone
 time_format = "12h"             # or "24h"
 timeout_secs = 4                # per network request
 max_tasks = 15                  # tasks shown in the full view (--json always has all)
+cache_minutes = 5               # reuse results this fresh; 0 = always fetch
 # cache_dir = "~/.cache/daypeek"
 
 [[calendars]]                   # repeat for each calendar
@@ -439,7 +497,9 @@ Google Tasks has no priorities, so these tasks show without one.
 
 macOS only. Nothing to set up: `daypeek` opens Things' local database
 **read-only** and shows to-dos in your Today list plus anything with a deadline
-today or earlier.
+today or earlier. `daypeek tomorrow` and `daypeek week` also show to-dos
+scheduled or due on those days. With no config file at all, Things is found
+automatically.
 
 1. Config:
 
@@ -485,7 +545,8 @@ Priority: high/medium/low → p1/p2/p3.
 ### Obsidian
 
 `daypeek` scans your vault for open `- [ ]` tasks with a due date and shows the
-first lines of today's daily note.
+first lines of today's daily note. On a Mac, `daypeek setup` (and a first run
+with no config) finds your most recent vault for you.
 
 ```toml
 [providers.obsidian]
@@ -598,9 +659,12 @@ Leave out the `[weather]` section to turn weather off.
 
 ## 5. Run it when a terminal opens
 
-`--compact` prints three lines and is the best fit for shell startup. Thanks to
-the cache it's quick, and if the network is slow, the per-request timeout
-(`timeout_secs`, default 4) caps the wait.
+`--compact` prints three lines and is the best fit for shell startup. It's
+instant when you open several terminals in a row: results fetched in the last
+`cache_minutes` (default 5) are reused instead of fetched again. Never across
+midnight, and local files are always read fresh. When it does fetch, the
+per-request timeout (`timeout_secs`, default 4) caps the wait. `daypeek
+--refresh` fetches everything now.
 
 **zsh** (`~/.zshrc`):
 
@@ -636,7 +700,7 @@ in the background:
 
 ```sh
 daypeek --compact --offline
-( daypeek >/dev/null 2>&1 & )      # refreshes ~/.cache/daypeek for next time
+( daypeek --refresh >/dev/null 2>&1 & )      # refreshes ~/.cache/daypeek for next time
 ```
 
 ---

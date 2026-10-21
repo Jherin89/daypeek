@@ -2,7 +2,8 @@
 
 - [Commands at a glance](#commands-at-a-glance)
 - [Flags](#flags)
-- [Subcommands](#subcommands): [`setup`](#daypeek-setup) · [`providers`](#daypeek-providers) · [`auth`](#daypeek-auth)
+- [Subcommands](#subcommands): [`tomorrow` and `week`](#daypeek-tomorrow-and-daypeek-week) · [`setup`](#daypeek-setup) · [`providers`](#daypeek-providers) · [`auth`](#daypeek-auth)
+- [Caching: why it's instant](#caching-why-its-instant)
 - [Reading the dashboard](#reading-the-dashboard)
 - [JSON output and `jq`](#json-output-and-jq)
 - [Environment variables](#environment-variables)
@@ -15,9 +16,12 @@ New here? Run `daypeek setup`, or see the [setup guide](SETUP.md).
 ## Commands at a glance
 
 ```sh
-daypeek                       # full dashboard
+daypeek                       # full dashboard for today
+daypeek tomorrow              # tomorrow: events, tasks due, forecast
+daypeek week                  # the next seven days
 daypeek --compact             # 2–3 line summary, for shell startup
 daypeek --json                # everything as JSON
+daypeek --refresh             # fetch everything now (skip the 5-minute reuse)
 daypeek --offline             # cached data only, no network
 daypeek --demo                # fake data (works without a config)
 daypeek setup                 # guided first-run setup (wizard)
@@ -30,16 +34,20 @@ daypeek --init                # write a starter config
 
 | Flag | What it does |
 | --- | --- |
-| `--compact` | A short summary: date, time, and weather; the current or next event; how many tasks are due and the most urgent one. Stale sources are flagged with `↻N`. |
+| `--compact` | A short summary: date, time, and weather; the current or next event; how many tasks are due and the most urgent one. Problems are flagged: `↻N` stale, `!N` failed, `○ todoist needs setup` for a source with no credential yet. With `week` it prints one line per day. |
 | `--json` | Prints the full snapshot as JSON on stdout (see [below](#json-output-and-jq)). There's no color and no task limit. |
-| `--demo` | Uses built-in fake data. Reads no config and makes no network calls. Combine it with `--compact`, `--json`, or `providers`. |
+| `--demo` | Uses built-in fake data. Reads no config and makes no network calls. Combine it with `--compact`, `--json`, `tomorrow`, `week`, `providers`, or `setup`. |
+| `--refresh` | Fetches every source now instead of reusing results from the last `cache_minutes` ([caching](#caching-why-its-instant)). |
 | `--offline` | Skips every network source and shows the last cached data, marked stale. Local sources (Things, Obsidian, files) are still read live. |
-| `--init` | Writes the commented sample config to `~/.config/daypeek/config.toml` (or the `--config` path). |
-| `--force` | With `--init`, overwrites an existing config. |
+| `--init` | Writes a sample config to `~/.config/daypeek/config.toml` (or the `--config` path). Everything in it is commented out, and the file is readable only by you (`0600`). |
+| `--force` | With `--init`, overwrites an existing config (keeping a `.bak`). |
 | `--config <PATH>` | Uses a different config file. Defaults to `$DAYPEEK_CONFIG`, then `$XDG_CONFIG_HOME/daypeek/config.toml`, then `~/.config/daypeek/config.toml`. |
 | `--color auto\|always\|never` | `auto` (the default) uses color only when stdout is a terminal and `NO_COLOR` isn't set. |
 | `-V`, `--version` | Prints the version. |
 | `-h`, `--help` | Prints help. Works on subcommands too, e.g. `daypeek auth --help`. |
+
+Flags work before or after a subcommand: `daypeek week --compact` and
+`daypeek --compact week` are the same.
 
 Examples:
 
@@ -52,6 +60,29 @@ alias dpw='daypeek --config ~/work/daypeek.toml'
 
 ## Subcommands
 
+### `daypeek tomorrow` and `daypeek week`
+
+```sh
+daypeek tomorrow              # tomorrow's events, tasks due tomorrow, the forecast
+daypeek week                  # today plus the next six days, one block per day
+daypeek week --compact        # one line per day
+daypeek tomorrow --json       # same JSON shape, with "view": "tomorrow"
+daypeek --demo week           # try it with fake data
+```
+
+- **Tomorrow** lists tomorrow's events (no "now / next" markers, since it hasn't
+  started), the tasks due exactly tomorrow, and tomorrow's high, low and chance
+  of rain.
+- **Week** has one block per day with that day's events, tasks and forecast.
+  Overdue and undated tasks sit under today. A multi-day event appears on
+  every day it covers.
+
+Every task app takes part. Todoist uses its own filter for these views
+(`overdue | 7 days` for the week); your `filter` setting still drives the
+today view. Things includes to-dos scheduled or due in the range. Google Tasks,
+Notion and Apple Reminders ask for tasks due through the last day, and the
+file-based apps are filtered locally.
+
 ### `daypeek setup`
 
 ```sh
@@ -61,10 +92,10 @@ daypeek --demo setup          # practice run: same prompts, nothing saved
 
 An interactive wizard that asks for:
 
-1. Your apps (multi-select).
+1. Your apps (multi-select: Space ticks, Enter continues). On macOS, Things 3 and your most recent Obsidian vault are pre-ticked when they're found.
 2. Each app's credential, typed hidden. On macOS it goes into the Keychain; on Linux you're shown the env var to set.
 3. Your calendars' iCal URLs.
-4. A city for weather.
+4. A city for weather, suggested from your time zone (type `none` to skip).
 
 It then writes the config (mode `0600`, keeping a `.bak` of any old one) and
 runs `daypeek providers`. For TickTick, Microsoft To Do, and Google Tasks it
@@ -94,7 +125,8 @@ line each:
 | `– unsupported` | Not available on this OS (Things and Reminders need macOS). |
 
 Options: `--json` (an array of `{id, name, kind, health: {status, detail}}` objects) and `--config`.
-`daypeek --demo providers` shows a sample.
+`daypeek --demo providers` shows a sample. The health check always fetches
+live; it never reuses cached results.
 
 ### `daypeek auth`
 
@@ -103,7 +135,9 @@ daypeek auth ticktick | mstodo | gtasks   [--port 8765]
 ```
 
 A one-time sign-in helper for the three apps whose APIs only accept OAuth. It
-uses **your own** app registration (see the [setup guide](SETUP.md)):
+uses **your own** app registration (see the [setup guide](SETUP.md)). Todoist
+and Notion don't need it: they use a personal API token, and
+`daypeek auth todoist` tells you where to get one and where to put it.
 
 1. It reads `client_id` from `[providers.<id>]` (or `<APP>_CLIENT_ID`). For TickTick and
    Google it also reads your client secret from `TICKTICK_CLIENT_SECRET` /
@@ -118,6 +152,25 @@ uses **your own** app registration (see the [setup guide](SETUP.md)):
 
 Use `--port` if 8765 is taken, and update the redirect URL in the app
 registration to match. Microsoft ignores the port on `localhost`, so it needs no change.
+
+## Caching: why it's instant
+
+Opening five terminals in a minute shouldn't call five APIs five times. Each
+cloud source (calendar feeds, Todoist and the other web apps, weather) is
+reused from `~/.cache/daypeek/` if it was fetched successfully in the last
+`cache_minutes` (default 5):
+
+```toml
+[general]
+cache_minutes = 5      # 0 = always fetch
+```
+
+- Reused results look exactly like fresh ones: no marker, because they are fresh.
+- Results are never reused across local midnight, so you won't see yesterday's list.
+- Local sources (Things, Reminders, Obsidian, files) are always read fresh; they're fast.
+- `daypeek --refresh` fetches everything now. `daypeek providers` always does.
+- `↻ stale` markers only appear when a fetch actually failed, exactly as before.
+- In JSON, a reused source has `"state": "cached"` with its `fetched_at`.
 
 ## Reading the dashboard
 
@@ -152,17 +205,20 @@ registration to match. Microsoft ignores the port on `localhost`, so it needs no
 | Key | Contents |
 | --- | --- |
 | `now` | RFC 3339 timestamp in your time zone |
-| `date` | `{date, weekday, iso_week, day_of_year, days_in_year, timezone}` |
+| `date` | `{date, weekday, iso_week, day_of_year, days_in_year, timezone}` (today) |
+| `view`, `start`, `end` | `"today"`, `"tomorrow"` or `"week"`, and the first and last day covered |
 | `events` | `[{title, all_day, start, end, calendar, location?}]`, sorted. Times are UTC. |
 | `calendars` | Per calendar: `{id, name, state, fetched_at?, error?}` |
 | `tasks` | `[{title, due, priority, sources, context?}]`, merged and sorted. `priority` is `urgent`, `high`, `medium`, `low`, or `none`. |
 | `providers` | Per provider: `{id, name, state, fetched_at?, error?}` |
 | `notes` | Daily-note excerpts: `[{title, lines, source}]` |
-| `weather` | `{source, freshness, data: {place, temperature, high, low, code, condition, precip_chance, unit}}`, or `null` |
+| `weather` | `{source, freshness, data: {place, temperature, high, low, code, condition, precip_chance, unit, days}}`, or absent. `days` is the 7-day forecast: `[{date, high, low, code, condition, precip_chance}]` |
 | `demo` | `true` for `--demo` output |
 
-`state` is `live`, `stale` (with `fetched_at` and `error`: the fetch failed and
-cached data is shown), or `failed` (with `error`: no cache to fall back on).
+`state` is `live`, `cached` (with `fetched_at`: reused from the last few
+minutes, see [caching](#caching-why-its-instant)), `stale` (with `fetched_at` and
+`error`: the fetch failed and cached data is shown), or `failed` (with `error`:
+no cache to fall back on).
 `weather.freshness` uses the same shape.
 
 Recipes:
@@ -185,7 +241,10 @@ daypeek --json | jq -r '[.events[] | select(.all_day | not) | select(.start > (n
 daypeek --json --offline | jq -r '.weather.data | "\(.temperature | round)\(.unit) \(.condition)"'
 
 # anything stale or failing?
-daypeek --json | jq -r '.calendars[], .providers[] | select(.state != "live") | "\(.id): \(.state) \(.error)"'
+daypeek --json | jq -r '.calendars[], .providers[] | select(.state == "stale" or .state == "failed") | "\(.id): \(.state) \(.error)"'
+
+# how many tasks are due this week
+daypeek week --json | jq '.tasks | length'
 ```
 
 ## Environment variables
@@ -211,7 +270,7 @@ Each one can also come from the macOS Keychain item `daypeek-<id>` or
 | Path | What |
 | --- | --- |
 | `~/.config/daypeek/config.toml` | Your config |
-| `~/.cache/daypeek/` | Last good data per source (JSON, mode `0600`). Safe to delete at any time. Change it with `general.cache_dir`. |
+| `~/.cache/daypeek/` | Last good data per source and view (JSON, mode `0600`). Safe to delete at any time. Change it with `general.cache_dir`. |
 
 ## Troubleshooting and FAQ
 
@@ -266,12 +325,29 @@ Release binaries aren't notarized. Clear the quarantine flag once:
 `xattr -d com.apple.quarantine "$(command -v daypeek)"`. You can also build from
 source with Cargo.
 
+**`daypeek: unknown timezone "…" in [general]`.**
+`general.timezone` must be an IANA name such as `America/New_York` or
+`Europe/London` (not `EST` or `New York`). daypeek uses your system time zone
+until you fix it, and says so on every run.
+
+**`daypeek: command not found` after the install script.**
+The folder it installed into isn't on your `PATH`. The installer printed the
+exact line to paste (for zsh: `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc`);
+open a new terminal afterwards. Or install with Homebrew instead.
+
+**Linux: `GLIBC_2.39 not found`.**
+The v0.1.0 Linux binary needs a recent glibc (Ubuntu 24.04 or newer). Newer
+releases ship a static build that runs on any distribution; until then, use
+`cargo install --git https://github.com/Jherin89/daypeek`.
+
 **`daypeek: config: … unknown field`.**
 There's a typo in your config. The message names the field and lists the valid
 ones. `daypeek` still runs with defaults so your shell never breaks.
 
 **My shell starts slower.**
-Use `daypeek --compact --offline` at startup, plus a background refresh (see
+Only the first terminal in a few minutes fetches anything; the rest reuse those
+results ([caching](#caching-why-its-instant)). For zero waiting even then, use
+`daypeek --compact --offline` at startup plus a background refresh (see
 [setup step 5](SETUP.md#5-run-it-when-a-terminal-opens)), or lower `timeout_secs`.
 
 **Can it mark tasks done?**

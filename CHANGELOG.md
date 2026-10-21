@@ -6,6 +6,60 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `daypeek tomorrow` and `daypeek week`: tomorrow's events, tasks due tomorrow
+  and the forecast, or seven day blocks with each day's events, tasks and
+  high/low. Both work with `--compact`, `--json` and `--demo`, and every task
+  app fetches the right date range (Todoist filter, Things scheduled/deadline
+  dates, Google Tasks `dueMax`, Notion date filter, Reminders bridge `--days`).
+  The weather now fetches a 7-day forecast (`weather.data.days` in JSON).
+- Instant repeat runs: cloud results fetched in the last `general.cache_minutes`
+  (default 5, `0` = off) are reused, never across midnight. They show as
+  `"state": "cached"` in JSON and with no marker on screen. `--refresh` fetches
+  everything now; `daypeek providers` always checks live.
+- Zero setup on a Mac: with no config file, daypeek finds Things 3 and your most
+  recent Obsidian vault (including its daily-notes folder and date format) and
+  shows their tasks. `daypeek setup` pre-ticks the apps it finds and suggests a
+  weather city from your time zone. Linux detects nothing and points you to
+  `daypeek setup`.
+- `daypeek today`, the same as plain `daypeek`.
+- Homebrew: `brew install jherin89/tap/daypeek` from the new
+  [Jherin89/homebrew-tap](https://github.com/Jherin89/homebrew-tap).
+- Release builds for Intel Macs (`x86_64-apple-darwin`) and a static Linux
+  build (`x86_64-unknown-linux-musl`) that runs on any distribution. CI builds
+  both on every push.
+
+### Changed
+
+- `--demo`, `--offline`, `--json`, `--compact` and the new `--refresh` are global:
+  they work before or after a subcommand (`daypeek providers --demo`).
+- `daypeek --init` writes a neutral sample config with everything commented out
+  (it used to switch on weather for one city and Todoist), with mode `0600`.
+- install.sh installs into a folder that's already on your `PATH` when it can,
+  honours `DAYPEEK_INSTALL_DIR`, prints the exact line to fix `PATH` otherwise,
+  and uses full paths in its next steps until you do.
+- The release workflow uses `softprops/action-gh-release` v3 (Node 24).
+
+### Fixed
+
+- The Linux release binary needed glibc 2.39; it's now a static musl build.
+- `daypeek setup` with no app ticked no longer says "You're set". It asks again
+  ("press Space to select"), then says plainly that nothing was configured.
+- Narrow terminals (for example 50 columns) no longer blank event titles: the
+  location column goes first, then the status shortens, and titles keep room.
+  Stale/failed lines and weather fit the width too.
+- `--compact` now shows sources that still need setup (`○ todoist needs setup`)
+  and failed ones (`!N`) instead of hiding them, and no longer claims `0 due`
+  when no task app answered. Missing credentials are reported even with
+  `--offline`.
+- Empty states point to `daypeek setup` instead of `daypeek --init`.
+- `daypeek auth todoist` (and `notion`) explains that these use a personal API
+  token and where to put it, instead of asking for a `client_id`; local apps say
+  they need no sign-in.
+- An invalid `general.timezone` prints a clear warning instead of being ignored.
+- README: no more "before the first release is out".
+
 ## [0.1.0] - 2026-10-21
 
 ### Added

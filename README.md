@@ -16,13 +16,19 @@ Calendar, tasks from 10 apps, and weather in one read-only command that prints i
 
 ## Get started in 60 seconds
 
-**1. Install** (macOS Apple Silicon or Linux x86_64)
+**1. Install** with [Homebrew](https://brew.sh) (macOS and Linux):
+
+```sh
+brew install jherin89/tap/daypeek
+```
+
+or with the install script (macOS and Linux x86_64; it checks the download's SHA-256 and tells you if your PATH needs a fix):
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Jherin89/daypeek/main/install.sh | sh
 ```
 
-<sub>Other platforms, or before the first release is out: <code>cargo install --git https://github.com/Jherin89/daypeek</code> (needs <a href="https://rustup.rs">Rust</a>). The script tells you if this applies.</sub>
+<sub>No prebuilt binary for your platform? <code>cargo install --git https://github.com/Jherin89/daypeek</code> (needs <a href="https://rustup.rs">Rust</a>). The script tells you if this applies.</sub>
 
 **2. Try it with fake data** (no accounts needed)
 
@@ -30,13 +36,20 @@ curl -fsSL https://raw.githubusercontent.com/Jherin89/daypeek/main/install.sh | 
 daypeek --demo
 ```
 
-**3. Connect your apps.** A wizard walks you through it, and tokens go to your Keychain.
+**3. Connect your apps.** A wizard walks you through it, and tokens go to your Keychain. On a Mac, Things 3 and Obsidian are found automatically and pre-ticked.
 
 ```sh
 daypeek setup
 ```
 
-**Add to your terminal startup** so you see your day in every new tab:
+**4. Look ahead** whenever you like:
+
+```sh
+daypeek tomorrow    # tomorrow's events, tasks due tomorrow, the forecast
+daypeek week        # the next seven days, one block per day
+```
+
+**Add to your terminal startup** so you see your day in every new tab (it reuses results from the last 5 minutes, so it's instant):
 
 ```sh
 echo 'daypeek --compact' >> ~/.zshrc      # bash: ~/.bashrc · fish: see docs/SETUP.md
@@ -45,15 +58,18 @@ echo 'daypeek --compact' >> ~/.zshrc      # bash: ~/.bashrc · fish: see docs/SE
 ## What you get
 
 - 📅 **Today's calendar** from any iCal link (Google, iCloud, Outlook…), with recurring and all-day events
+- 🗓 **Tomorrow and the week ahead** with `daypeek tomorrow` and `daypeek week`, including the daily forecast
 - ✅ **Tasks from 10 apps, merged**, with duplicates folded together, p1–p4 priorities, and a badge showing where each task came from
 - ⛅ **Weather** from Open-Meteo, no API key needed
-- ⚡ **Instant and offline-friendly.** Every source is cached, and stale data is clearly marked.
+- ⚡ **Instant and offline-friendly.** Results from the last few minutes are reused (`--refresh` fetches now), and when you're offline the last good data is shown and clearly marked.
+- 🍎 **Zero setup on a Mac** for Things 3 and Obsidian: with no config at all, daypeek finds them and shows your tasks.
 - 🔒 **Private.** Read-only, no telemetry, and tokens only go to each app's own API.
 
 ## Screenshots
 
 | | |
 | :---: | :---: |
+| <img src="docs/screenshot-week.png" alt="daypeek week: seven day blocks with events, tasks, and each day's forecast" width="420"><br>**`daypeek week`**: the next seven days | <img src="docs/screenshot-tomorrow.png" alt="daypeek tomorrow: tomorrow's events, tasks due tomorrow, and the forecast" width="420"><br>**`daypeek tomorrow`**: plan ahead |
 | <img src="docs/screenshot-setup.png" alt="The daypeek setup wizard: pick apps, paste a hidden token, add a calendar and a city, then a health check" width="420"><br>**`daypeek setup`**: guided setup in four steps | <img src="docs/screenshot-compact.png" alt="daypeek --compact: a three-line summary" width="420"><br>**`--compact`**: three lines for your shell startup |
 | <img src="docs/screenshot-providers.png" alt="daypeek providers: a health check per source" width="420"><br>**`daypeek providers`**: is everything connected? | <img src="docs/screenshot-json.png" alt="daypeek --json piped to jq" width="420"><br>**`--json`**: for scripts, status bars, and `jq` |
 | <img src="docs/screenshot-offline.png" alt="Offline: every cloud source shows its cached data, marked stale" width="420"><br>**Offline**: last good data, clearly marked | <img src="docs/screenshot-light.png" alt="daypeek in a light terminal theme" width="420"><br>**Light themes** look good too |
@@ -242,13 +258,13 @@ Missing one? [Request it](https://github.com/Jherin89/daypeek/issues/new?templat
 <summary><b>How it works</b></summary>
 
 ```
-config.toml ─┬─ calendars ─► fetch .ics ─► parse VEVENTs ─► expand RRULE for today ─┐
+config.toml ─┬─ calendars ─► fetch .ics ─► parse VEVENTs ─► expand RRULE per day ───┐
              ├─ providers ─► Provider::fetch() (one thread each) ─► merge + dedup ───┼─► full / compact / JSON
-             └─ weather ───► geocode (cached) ─► Open-Meteo forecast ────────────────┘
-                       every source goes through the cache: live ▸ stale ▸ failed
+             └─ weather ───► geocode (cached) ─► Open-Meteo 7-day forecast ──────────┘
+     every source goes through the cache: cached (< 5 min) ▸ live ▸ stale ▸ failed
 ```
 
-Every source is fetched in parallel with plain threads and a hard timeout. There's no async runtime. A run takes about 0.1–0.5 s live, 5 ms with `--offline`, and 3 ms with `--demo`. Cloud providers are tested against recorded fixtures, and CI runs on Ubuntu and on macOS (Apple Silicon).
+Every source is fetched in parallel with plain threads and a hard timeout. There's no async runtime. A run takes about 0.1–0.5 s when it fetches, and about 5 ms when it reuses results from the last `cache_minutes` (default 5), runs `--offline`, or runs `--demo`. Cloud providers are tested against recorded fixtures, and CI runs on Ubuntu and on macOS (Apple Silicon).
 
 ```sh
 cargo test && cargo run -- --demo
