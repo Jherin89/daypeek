@@ -72,7 +72,7 @@ pub fn priority(label: &str) -> Priority {
     }
 }
 
-/// The query filter: date on or before today and not done.
+/// The query filter: date on or before the view's last day and not done.
 pub fn filter(s: &Settings, today: &str) -> Value {
     let date = json!({ "property": s.date_property, "date": { "on_or_before": today } });
     if s.done_values.is_empty() {
@@ -173,7 +173,7 @@ impl Provider for Notion {
         let token = self.token().unwrap_or_default();
         let db = self.s.database_id.replace('-', "");
         let url = format!("https://api.notion.com/v1/databases/{db}/query");
-        let today = ctx.today.format("%Y-%m-%d").to_string();
+        let today = ctx.until.format("%Y-%m-%d").to_string();
         let mut body = json!({ "filter": filter(&self.s, &today), "page_size": 100 });
         let mut tasks = Vec::new();
         for _ in 0..10 {

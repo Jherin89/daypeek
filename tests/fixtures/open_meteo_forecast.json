@@ -6,9 +6,10 @@
   "current": { "time": "2026-10-21T10:45", "interval": 900, "temperature_2m": 68.4, "weather_code": 2 },
   "daily_units": { "temperature_2m_max": "°F" },
   "daily": {
-    "time": ["2026-10-21"],
-    "temperature_2m_max": [76.1],
-    "temperature_2m_min": [51.3],
-    "precipitation_probability_max": [10]
+    "time": ["2026-10-21", "2026-10-22", "2026-10-23", "2026-10-24", "2026-10-25", "2026-10-26", "2026-10-27"],
+    "weather_code": [2, 63, 3, 0, 1, 80, 2],
+    "temperature_2m_max": [76.1, 71.6, 68.0, 70.3, 73.9, 69.1, 72.4],
+    "temperature_2m_min": [51.3, 49.8, 47.2, 45.0, 50.6, 52.3, 48.9],
+    "precipitation_probability_max": [10, 70, 20, 0, 5, 55, 10]
   }
 }

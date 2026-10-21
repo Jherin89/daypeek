@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use chrono::{DateTime, Datelike, NaiveDate, Utc};
+use chrono::{DateTime, Datelike, Days, NaiveDate, Utc};
 use chrono_tz::Tz;
 use serde::Serialize;
 
@@ -42,6 +42,45 @@ impl DateInfo {
     }
 }
 
+/// Which days the dashboard covers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum View {
+    /// `daypeek`: today, with overdue tasks and live now/next markers.
+    #[default]
+    Today,
+    /// `daypeek tomorrow`: just tomorrow's events and tasks due tomorrow.
+    Tomorrow,
+    /// `daypeek week`: today through the next six days, grouped by day.
+    Week,
+}
+
+impl View {
+    /// First and last local day covered, inclusive.
+    pub fn range(self, today: NaiveDate) -> (NaiveDate, NaiveDate) {
+        match self {
+            View::Today => (today, today),
+            View::Tomorrow => (today + Days::new(1), today + Days::new(1)),
+            View::Week => (today, today + Days::new(6)),
+        }
+    }
+
+    /// Task results differ per view, so each view caches separately.
+    fn cache_suffix(self) -> &'static str {
+        match self {
+            View::Today => "",
+            View::Tomorrow => "@tomorrow",
+            View::Week => "@week",
+        }
+    }
+
+    /// Every day in the view, in order.
+    pub fn days(self, today: NaiveDate) -> Vec<NaiveDate> {
+        let (start, end) = self.range(today);
+        start.iter_days().take_while(|d| *d <= end).collect()
+    }
+}
+
 /// Status of one source (a calendar feed or task provider).
 #[derive(Debug, Clone, Serialize)]
 pub struct SourceStatus {
@@ -56,6 +95,10 @@ pub struct SourceStatus {
 pub struct Snapshot {
     pub now: DateTime<Tz>,
     pub date: DateInfo,
+    pub view: View,
+    /// First and last day shown (both today for the default view).
+    pub start: NaiveDate,
+    pub end: NaiveDate,
     pub events: Vec<Event>,
     pub calendars: Vec<SourceStatus>,
     pub tasks: Vec<Task>,
@@ -72,20 +115,42 @@ pub fn resolve_tz(cfg: &Config) -> Tz {
         .timezone
         .as_deref()
         .and_then(|t| t.parse().ok())
-        .or_else(|| iana_time_zone::get_timezone().ok()?.parse().ok())
+        .unwrap_or_else(system_tz)
+}
+
+/// The system time zone, or UTC if it can't be determined.
+pub fn system_tz() -> Tz {
+    iana_time_zone::get_timezone()
+        .ok()
+        .and_then(|t| t.parse().ok())
         .unwrap_or(chrono_tz::UTC)
+}
+
+/// A warning when `general.timezone` is set but isn't a valid IANA name
+/// (it would otherwise be ignored silently).
+pub fn timezone_warning(cfg: &Config) -> Option<String> {
+    let name = cfg.general.timezone.as_deref()?;
+    if name.parse::<Tz>().is_ok() {
+        return None;
+    }
+    Some(format!(
+        "unknown timezone {name:?} in [general] (use an IANA name like \"America/New_York\"); using {} instead",
+        system_tz().name()
+    ))
 }
 
 /// Fetch every configured source in parallel. Never fails: problems are
 /// reported per source.
-pub fn gather(cfg: &Config, cache: &Cache, now: DateTime<Utc>) -> Snapshot {
+pub fn gather(cfg: &Config, cache: &Cache, now: DateTime<Utc>, view: View) -> Snapshot {
     let tz = resolve_tz(cfg);
     let now = now.with_timezone(&tz);
     let today = now.date_naive();
+    let (start, end) = view.range(today);
     let http = Http::new(Duration::from_secs(cfg.general.timeout_secs.max(1)));
     let ctx = Ctx {
         http: &http,
         today,
+        until: end,
         tz,
     };
     let (built, broken) = providers::build_all(cfg);
@@ -111,12 +176,20 @@ pub fn gather(cfg: &Config, cache: &Cache, now: DateTime<Utc>) -> Snapshot {
             .map(|p| {
                 let ctx = &ctx;
                 s.spawn(move || {
-                    let key = format!("provider-{}", p.id());
+                    let key = format!("provider-{}{}", p.id(), view.cache_suffix());
                     let network = p.kind() == providers::Kind::Cloud;
-                    let out: Sourced<Output> = cache.fetch_with(&key, p.id(), network, || {
-                        p.check()?;
-                        p.fetch(ctx)
-                    });
+                    // Missing credentials / wrong platform aren't network
+                    // problems: report them even in --offline mode.
+                    let out: Sourced<Output> = match p.check() {
+                        Err(e) => Sourced {
+                            source: p.id().to_string(),
+                            freshness: Freshness::Failed {
+                                error: e.to_string(),
+                            },
+                            data: None,
+                        },
+                        Ok(()) => cache.fetch_with(&key, p.id(), network, || p.fetch(ctx)),
+                    };
                     (p.id().to_string(), p.name().to_string(), out)
                 })
             })
@@ -141,7 +214,7 @@ pub fn gather(cfg: &Config, cache: &Cache, now: DateTime<Utc>) -> Snapshot {
     let mut calendars = Vec::new();
     for (c, feed) in cal_results {
         if let Some(text) = &feed.data {
-            events.extend(calendar::events_on(text, &c.name, today, tz));
+            events.extend(calendar::events_between(text, &c.name, start, end, tz));
         }
         calendars.push(SourceStatus {
             id: c.name.clone(),
@@ -157,7 +230,8 @@ pub fn gather(cfg: &Config, cache: &Cache, now: DateTime<Utc>) -> Snapshot {
     for (id, name, out) in provider_results {
         if let Some(o) = out.data {
             lists.push(o.tasks);
-            if out.freshness.is_live() {
+            // Today's daily note only belongs on today's dashboard.
+            if out.freshness.is_ok() && view == View::Today {
                 notes.extend(o.note);
             }
         }
@@ -180,9 +254,12 @@ pub fn gather(cfg: &Config, cache: &Cache, now: DateTime<Utc>) -> Snapshot {
     Snapshot {
         now,
         date: DateInfo::new(now),
+        view,
+        start,
+        end,
         events,
         calendars,
-        tasks: tasks::merge(lists, today),
+        tasks: tasks::merge_window(lists, today, start, end),
         providers: statuses,
         notes,
         weather,
@@ -196,6 +273,6 @@ pub fn is_auth_missing(f: &Freshness) -> bool {
         Freshness::Failed { error } | Freshness::Stale { error, .. } => {
             error.starts_with(&Error::AuthMissing(String::new()).to_string())
         }
-        Freshness::Live => false,
+        Freshness::Live | Freshness::Cached { .. } => false,
     }
 }

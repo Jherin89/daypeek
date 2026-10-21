@@ -177,7 +177,21 @@ fn init_writes_sample_and_refuses_overwrite() {
     let (ok, _, _) = run(&["--init", "--config", cfg.to_str().unwrap()]);
     assert!(ok);
     let text = std::fs::read_to_string(&cfg).unwrap();
-    assert!(text.contains("Evans, Georgia"));
+    assert!(
+        text.contains("# [weather]") && !text.contains("Evans"),
+        "neutral"
+    );
+    assert!(
+        text.lines()
+            .all(|l| l.trim().is_empty() || l.starts_with('#')),
+        "all commented"
+    );
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(&cfg).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o600, "owner-only like `daypeek setup`");
+    }
     let (ok, _, err) = run(&["--init", "--config", cfg.to_str().unwrap()]);
     assert!(!ok);
     assert!(err.contains("already exists"));
@@ -263,4 +277,214 @@ fn setup_without_a_terminal_exits_with_a_hint() {
         err.contains("needs a terminal") && err.contains("daypeek --init"),
         "{err}"
     );
+}
+
+#[test]
+fn view_flags_work_before_or_after_the_subcommand() {
+    for args in [
+        vec!["providers", "--demo", "--color", "never"],
+        vec!["--demo", "providers", "--color", "never"],
+    ] {
+        let (ok, out, err) = run(&args);
+        assert!(ok && out.contains("auth missing"), "{args:?}: {err}");
+    }
+    let (ok, out, err) = run(&["week", "--demo", "--json", "--at", AT]);
+    assert!(ok, "{err}");
+    let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+    assert_eq!(v["view"], "week");
+    assert_eq!(
+        (v["start"].as_str(), v["end"].as_str()),
+        (Some("2026-10-21"), Some("2026-10-27"))
+    );
+    assert_eq!(v["weather"]["data"]["days"].as_array().unwrap().len(), 7);
+
+    let (ok, out, _) = run(&["tomorrow", "--compact", "--demo", "--at", AT]);
+    assert!(ok);
+    assert!(out.starts_with("Tomorrow · Thu Oct 22"), "{out}");
+    assert!(
+        out.contains("Dentist") && out.trim().lines().count() <= 3,
+        "{out}"
+    );
+
+    let (ok, out, _) = run(&["tomorrow", "--demo", "--json", "--at", AT]);
+    assert!(ok);
+    let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+    assert_eq!(v["view"], "tomorrow");
+    assert!(v["tasks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|t| t["due"] == "2026-10-22"));
+
+    let (ok, out, _) = run(&[
+        "week",
+        "--demo",
+        "--compact",
+        "--at",
+        AT,
+        "--color",
+        "never",
+    ]);
+    assert!(ok);
+    assert_eq!(
+        out.trim().lines().count(),
+        8,
+        "header + one line per day:\n{out}"
+    );
+    assert!(
+        out.contains("Sat 24") && out.contains("Weekend in Savannah"),
+        "{out}"
+    );
+
+    let (ok, out, _) = run(&["week", "--demo", "--at", AT, "--color", "never"]);
+    assert!(ok);
+    for needle in [
+        "This week · Oct 21 – Oct 27",
+        "THU OCT 22  tomorrow",
+        "Brunch with the Hendersons",
+        "Send invoice to Acme",
+    ] {
+        assert!(out.contains(needle), "missing {needle:?} in\n{out}");
+    }
+}
+
+#[test]
+fn narrow_terminals_truncate_instead_of_blanking_titles() {
+    use unicode_width::UnicodeWidthStr;
+    for view in ["today", "tomorrow", "week"] {
+        let out = daypeek()
+            .args([view, "--demo", "--at", AT, "--color", "never"])
+            .env("COLUMNS", "50")
+            .output()
+            .unwrap();
+        let out = String::from_utf8_lossy(&out.stdout);
+        for line in out.lines() {
+            assert!(
+                line.width() <= 50,
+                "{view}: too wide ({}): {line:?}",
+                line.width()
+            );
+            assert!(
+                !line.trim_end().ends_with("  …"),
+                "{view}: blank title: {line:?}"
+            );
+        }
+        assert!(out.contains("Team standup"), "{view}:\n{out}");
+    }
+}
+
+#[test]
+fn compact_shows_sources_that_need_setup() {
+    let dir = fixture_config("[providers.todoist]\ntoken_env = \"DAYPEEK_CLI_TEST_UNSET\"\n");
+    let cfg = dir.path().join("config.toml");
+    let (ok, out, _) = run(&[
+        "--config",
+        cfg.to_str().unwrap(),
+        "--offline",
+        "--compact",
+        "--at",
+        AT,
+        "--color",
+        "never",
+    ]);
+    assert!(ok);
+    assert!(out.contains("○ todoist needs setup"), "{out}");
+}
+
+#[test]
+fn empty_state_points_to_setup() {
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = dir.path().join("none.toml");
+    let (ok, out, _) = run(&[
+        "--config",
+        cfg.to_str().unwrap(),
+        "--at",
+        AT,
+        "--color",
+        "never",
+    ]);
+    assert!(ok);
+    assert!(
+        out.contains("Run `daypeek setup`") && !out.contains("--init"),
+        "{out}"
+    );
+    let (ok, out, _) = run(&[
+        "--config",
+        cfg.to_str().unwrap(),
+        "--compact",
+        "--at",
+        AT,
+        "--color",
+        "never",
+    ]);
+    assert!(ok && out.contains("daypeek setup"), "{out}");
+    let (ok, out, _) = run(&["--config", cfg.to_str().unwrap(), "providers"]);
+    assert!(
+        ok && out.contains("daypeek setup") && !out.contains("--init"),
+        "{out}"
+    );
+}
+
+#[test]
+fn auth_explains_token_providers() {
+    // With or without a [providers.todoist] block.
+    let dir = fixture_config("[providers.todoist]\n");
+    let cfg = dir.path().join("config.toml");
+    for args in [
+        vec!["auth", "todoist"],
+        vec!["--config", cfg.to_str().unwrap(), "auth", "todoist"],
+    ] {
+        let (ok, _, err) = run(&args);
+        assert!(!ok);
+        assert!(
+            err.contains("personal API token") && err.contains("DAYPEEK_TODOIST_TOKEN"),
+            "{err}"
+        );
+        assert!(!err.contains("client_id"), "{err}");
+    }
+    let (_, _, err) = run(&["auth", "things"]);
+    assert!(err.contains("needs no sign-in"), "{err}");
+    let (_, _, err) = run(&["auth", "gtasks"]);
+    assert!(err.contains("daypeek setup"), "{err}");
+}
+
+#[test]
+fn invalid_timezone_warns() {
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = dir.path().join("config.toml");
+    std::fs::write(&cfg, "[general]\ntimezone = \"Mars/Olympus\"\n").unwrap();
+    let (ok, out, err) = run(&[
+        "--config",
+        cfg.to_str().unwrap(),
+        "--at",
+        AT,
+        "--color",
+        "never",
+    ]);
+    assert!(ok);
+    assert!(err.contains("unknown timezone \"Mars/Olympus\""), "{err}");
+    assert!(out.contains("October 21"));
+}
+
+#[test]
+fn refresh_is_accepted_and_conflicts_with_offline() {
+    let dir = fixture_config("");
+    let cfg = dir.path().join("config.toml");
+    let (ok, out, err) = run(&[
+        "--config",
+        cfg.to_str().unwrap(),
+        "--refresh",
+        "--json",
+        "--at",
+        AT,
+    ]);
+    assert!(ok, "{err}");
+    let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+    assert!(v["providers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|p| p["state"] == "live"));
+    let (ok, _, _) = run(&["--refresh", "--offline", "--demo"]);
+    assert!(!ok);
 }

@@ -27,16 +27,37 @@ pub fn normalize_title(title: &str) -> String {
 /// Keep tasks that are due today or earlier (undated tasks pass through: a
 /// provider only emits them when configured to).
 pub fn relevant(task: &Task, today: NaiveDate) -> bool {
-    task.due.is_none_or(|d| d <= today)
+    in_window(task, today, today, today)
+}
+
+/// Does `task` belong in a view of `start..=end`? Views that include today
+/// also show overdue and undated tasks; a view starting later (tomorrow)
+/// shows only what is due inside it.
+pub fn in_window(task: &Task, today: NaiveDate, start: NaiveDate, end: NaiveDate) -> bool {
+    let from_today = start <= today;
+    match task.due {
+        None => from_today,
+        Some(d) => d <= end && (from_today || d >= start),
+    }
 }
 
 /// Merge and de-duplicate by (normalized title, due date). Duplicates combine
 /// their source badges and keep the highest priority.
 pub fn merge(lists: Vec<Vec<Task>>, today: NaiveDate) -> Vec<Task> {
+    merge_window(lists, today, today, today)
+}
+
+/// [`merge`] for a view covering `start..=end` (see [`in_window`]).
+pub fn merge_window(
+    lists: Vec<Vec<Task>>,
+    today: NaiveDate,
+    start: NaiveDate,
+    end: NaiveDate,
+) -> Vec<Task> {
     let mut index: HashMap<(String, Option<NaiveDate>), usize> = HashMap::new();
     let mut out: Vec<Task> = Vec::new();
     for task in lists.into_iter().flatten() {
-        if !relevant(&task, today) || task.title.trim().is_empty() {
+        if !in_window(&task, today, start, end) || task.title.trim().is_empty() {
             continue;
         }
         let key = (normalize_title(&task.title), task.due);
@@ -91,6 +112,32 @@ mod tests {
         let mut t = Task::new(title, due, p);
         t.sources.push(src.into());
         t
+    }
+
+    #[test]
+    fn windows_for_tomorrow_and_week() {
+        let today = d(21).unwrap();
+        let tomorrow = d(22).unwrap();
+        let week_end = d(27).unwrap();
+        let overdue = t("Old", d(19), Priority::None, "x");
+        let undated = t("Someday", None, Priority::None, "x");
+        let due_tomorrow = t("Dentist forms", d(22), Priority::None, "x");
+        let due_sat = t("Pay bill", d(24), Priority::None, "x");
+        let next_month = t("Later", d(30), Priority::None, "x");
+        // Today: overdue + today + undated, nothing later.
+        assert!(in_window(&overdue, today, today, today));
+        assert!(in_window(&undated, today, today, today));
+        assert!(!in_window(&due_tomorrow, today, today, today));
+        // Tomorrow: only what is due tomorrow.
+        assert!(in_window(&due_tomorrow, today, tomorrow, tomorrow));
+        assert!(!in_window(&overdue, today, tomorrow, tomorrow));
+        assert!(!in_window(&undated, today, tomorrow, tomorrow));
+        assert!(!in_window(&due_sat, today, tomorrow, tomorrow));
+        // Week: overdue, undated, and everything through day 7.
+        for task in [&overdue, &undated, &due_tomorrow, &due_sat] {
+            assert!(in_window(task, today, today, week_end), "{}", task.title);
+        }
+        assert!(!in_window(&next_month, today, today, week_end));
     }
 
     #[test]

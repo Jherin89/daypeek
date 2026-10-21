@@ -113,6 +113,7 @@ mod tests {
         let ctx = Ctx {
             http: &http,
             today: NaiveDate::from_ymd_opt(2026, 10, 21).unwrap(),
+            until: NaiveDate::from_ymd_opt(2026, 10, 21).unwrap(),
             tz: chrono_tz::UTC,
         };
         let tasks = p.fetch(&ctx).unwrap().tasks;

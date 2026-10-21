@@ -65,9 +65,16 @@ pub fn default_db_path() -> Option<PathBuf> {
     legacy.exists().then_some(legacy)
 }
 
-/// Query an open Things database for today's to-dos.
-pub fn query(conn: &Connection, today: NaiveDate, source: &str) -> Result<Vec<Task>> {
+/// Query an open Things database for to-dos in Today (or scheduled /
+/// due on or before `until`, for the tomorrow and week views).
+pub fn query(
+    conn: &Connection,
+    today: NaiveDate,
+    until: NaiveDate,
+    source: &str,
+) -> Result<Vec<Task>> {
     let t = pack_date(today);
+    let u = pack_date(until.max(today));
     let mut stmt = conn.prepare(
         "SELECT t.title, t.startDate, t.deadline, COALESCE(p.title, a.title, '')
            FROM TMTask t
@@ -75,10 +82,11 @@ pub fn query(conn: &Connection, today: NaiveDate, source: &str) -> Result<Vec<Ta
            LEFT JOIN TMArea a ON a.uuid = t.area
           WHERE t.type = 0 AND t.status = 0 AND t.trashed = 0
             AND ((t.start = 1 AND t.startDate IS NOT NULL AND t.startDate <= ?1)
-                 OR (t.deadline IS NOT NULL AND t.deadline <= ?1))
+                 OR (t.start = 2 AND t.startDate IS NOT NULL AND t.startDate <= ?2)
+                 OR (t.deadline IS NOT NULL AND t.deadline <= ?2))
           ORDER BY t.todayIndex, t.\"index\"",
     )?;
-    let rows = stmt.query_map([t], |r| {
+    let rows = stmt.query_map([t, u], |r| {
         Ok((
             r.get::<_, Option<String>>(0)?,
             r.get::<_, Option<i64>>(1)?,
@@ -94,10 +102,11 @@ pub fn query(conn: &Connection, today: NaiveDate, source: &str) -> Result<Vec<Ta
         };
         let deadline = deadline.and_then(unpack_date);
         let start = start.and_then(unpack_date);
-        // A to-do in Today with a future deadline is still "today".
+        // A to-do in Today with a later deadline is still "today"; one
+        // scheduled later this week is due on its scheduled day.
         let due = match deadline {
-            Some(d) if d <= today => Some(d),
-            _ => start.map(|s| s.min(today)),
+            Some(d) if d <= until => Some(d.min(start.map_or(d, |s| s.max(today)))),
+            _ => start.map(|s| s.min(until)),
         };
         let mut task = Task::new(title, due, Priority::None).with_context(ctx);
         task.sources.push(source.to_string());
@@ -150,7 +159,7 @@ impl Provider for Things {
             OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )?;
         conn.busy_timeout(std::time::Duration::from_millis(500))?;
-        Ok(Output::tasks(query(&conn, ctx.today, &self.id)?))
+        Ok(Output::tasks(query(&conn, ctx.today, ctx.until, &self.id)?))
     }
 }
 
@@ -223,7 +232,7 @@ mod tests {
         drop(fixture_db(&path, today));
 
         let conn = Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
-        let tasks = query(&conn, today, "things").unwrap();
+        let tasks = query(&conn, today, today, "things").unwrap();
         let titles: Vec<_> = tasks.iter().map(|t| t.title.as_str()).collect();
         assert_eq!(
             titles,

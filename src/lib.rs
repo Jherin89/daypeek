@@ -8,6 +8,7 @@ pub mod cache;
 pub mod calendar;
 pub mod config;
 pub mod demo;
+pub mod detect;
 pub mod error;
 pub mod http;
 pub mod model;

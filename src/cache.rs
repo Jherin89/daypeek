@@ -27,19 +27,40 @@ pub struct Cache {
     dir: Option<PathBuf>,
     /// `--offline`: skip the fetch and serve whatever is cached.
     pub offline: bool,
+    /// Reuse a network result younger than this instead of fetching again
+    /// (`general.cache_minutes`). `None` = always fetch (`--refresh`).
+    fresh_for: Option<chrono::Duration>,
+    /// Never reuse an entry fetched before this instant (local midnight), so
+    /// yesterday's list is never shown as today's.
+    not_before: Option<DateTime<Utc>>,
 }
 
 impl Cache {
     pub fn new(dir: Option<PathBuf>, offline: bool) -> Self {
-        Cache { dir, offline }
+        Cache {
+            dir,
+            offline,
+            fresh_for: None,
+            not_before: None,
+        }
+    }
+
+    /// Serve network results fetched less than `fresh_for` ago (and not before
+    /// `not_before`) straight from disk, marked [`Freshness::Cached`].
+    /// A zero duration disables reuse.
+    pub fn reuse_recent(
+        mut self,
+        fresh_for: chrono::Duration,
+        not_before: Option<DateTime<Utc>>,
+    ) -> Self {
+        self.fresh_for = (fresh_for > chrono::Duration::zero()).then_some(fresh_for);
+        self.not_before = not_before;
+        self
     }
 
     /// A cache that never reads or writes (used by `--demo` and tests).
     pub fn disabled() -> Self {
-        Cache {
-            dir: None,
-            offline: false,
-        }
+        Cache::new(None, false)
     }
 
     pub fn dir(&self) -> Option<&Path> {
@@ -65,6 +86,16 @@ impl Cache {
         let raw = fs::read_to_string(self.path(key)?).ok()?;
         let e: Entry<T> = serde_json::from_str(&raw).ok()?;
         Some((e.fetched_at, e.data))
+    }
+
+    /// A cached value young enough to reuse without fetching.
+    fn recent<T: DeserializeOwned>(&self, key: &str) -> Option<(DateTime<Utc>, T)> {
+        let fresh_for = self.fresh_for?;
+        let (at, data) = self.load::<T>(key)?;
+        let now = Utc::now();
+        let young = at <= now && now - at < fresh_for;
+        let same_day = self.not_before.is_none_or(|nb| at >= nb);
+        (young && same_day).then_some((at, data))
     }
 
     /// Write a value; failures are ignored (the cache is best-effort).
@@ -104,6 +135,15 @@ impl Cache {
         T: Serialize + DeserializeOwned,
         F: FnOnce() -> Result<T>,
     {
+        if network && !self.offline {
+            if let Some(hit) = self.recent::<T>(key) {
+                return Sourced {
+                    source: source.to_string(),
+                    freshness: Freshness::Cached { fetched_at: hit.0 },
+                    data: Some(hit.1),
+                };
+            }
+        }
         let result = if self.offline && network {
             Err(Error::Http("offline mode".into()))
         } else {
@@ -200,6 +240,48 @@ mod tests {
         // Local sources still run offline.
         let s = offline.fetch_with("local", "test", false, || Ok(1u8));
         assert!(s.freshness.is_live());
+    }
+
+    #[test]
+    fn recent_results_are_reused_without_fetching() {
+        let dir = tempfile::tempdir().unwrap();
+        let plain = Cache::new(Some(dir.path().to_path_buf()), false);
+        plain.fetch("k", "test", || Ok(1u32));
+        let cache = plain
+            .clone()
+            .reuse_recent(chrono::Duration::minutes(5), None);
+        let s = cache.fetch("k", "test", || -> Result<u32> { panic!("must not fetch") });
+        assert_eq!(s.data, Some(1));
+        assert!(matches!(s.freshness, Freshness::Cached { .. }));
+        assert!(s.freshness.is_ok() && !s.freshness.is_live());
+        // Local sources are always read fresh.
+        let s = cache.fetch_with("k", "test", false, || Ok(2u32));
+        assert_eq!(s.freshness, Freshness::Live);
+    }
+
+    #[test]
+    fn refresh_and_expired_entries_fetch_again() {
+        let dir = tempfile::tempdir().unwrap();
+        let plain = Cache::new(Some(dir.path().to_path_buf()), false);
+        plain.fetch("k", "test", || Ok(1u32));
+        // `--refresh` (no reuse) always fetches.
+        let s = plain.fetch("k", "test", || Ok(2u32));
+        assert_eq!((s.data, s.freshness), (Some(2), Freshness::Live));
+        // Zero minutes disables reuse.
+        let off = plain.clone().reuse_recent(chrono::Duration::zero(), None);
+        assert_eq!(
+            off.fetch("k", "test", || Ok(3u32)).freshness,
+            Freshness::Live
+        );
+        // An entry from before local midnight is never reused.
+        let tomorrow = Utc::now() + chrono::Duration::hours(1);
+        let day = plain
+            .clone()
+            .reuse_recent(chrono::Duration::minutes(5), Some(tomorrow));
+        assert_eq!(day.fetch("k", "test", || Ok(4u32)).data, Some(4));
+        // A failed fetch after expiry is still reported as stale, not cached.
+        let s: Sourced<u32> = day.fetch("k", "test", || Err(Error::Http("down".into())));
+        assert!(matches!(s.freshness, Freshness::Stale { .. }));
     }
 
     #[test]

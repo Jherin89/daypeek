@@ -42,7 +42,18 @@ pub struct Ctx<'a> {
     pub http: &'a Http,
     /// "Today" in the user's zone.
     pub today: NaiveDate,
+    /// Last day the current view covers (`today` for the default view,
+    /// tomorrow for `daypeek tomorrow`, today + 6 for `daypeek week`).
+    /// Providers that filter server-side fetch through this date.
+    pub until: NaiveDate,
     pub tz: Tz,
+}
+
+impl Ctx<'_> {
+    /// Days covered from today through `until`, inclusive (1 for today).
+    pub fn days(&self) -> i64 {
+        (self.until - self.today).num_days().max(0) + 1
+    }
 }
 
 /// What a provider returns.

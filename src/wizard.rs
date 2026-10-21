@@ -14,9 +14,49 @@ use dialoguer::theme::ColorfulTheme;
 use dialoguer::{Confirm, Input, MultiSelect, Password, Select};
 
 use crate::config::{expand_tilde, Units};
+use crate::detect::{self, Detected, Vault};
 use crate::http::Http;
 use crate::setup::{self, Answers, App, AppConfig, APPS};
 use crate::{oauth, secrets};
+
+/// `daypeek setup --demo` pretends to find Things and a vault, to show the
+/// pre-ticked list.
+fn demo_detected() -> Detected {
+    Detected {
+        things: Some(PathBuf::from("Things Database.thingsdatabase/main.sqlite")),
+        vaults: vec![Vault {
+            path: expand_tilde("~/Documents/Obsidian/Main"),
+            daily_notes_folder: "Daily".into(),
+            daily_note_format: "%Y-%m-%d".into(),
+        }],
+    }
+}
+
+/// Which entries of [`APPS`] to pre-tick.
+pub fn preticked(d: &Detected) -> Vec<bool> {
+    APPS.iter()
+        .map(|a| match a.id {
+            "things" => d.things.is_some(),
+            "obsidian" => !d.vaults.is_empty(),
+            _ => false,
+        })
+        .collect()
+}
+
+/// The setup prompt's answer for the weather city: `None` = skip.
+pub fn city_answer(input: &str) -> Option<String> {
+    let t = input.trim();
+    if t.is_empty()
+        || matches!(
+            t.to_ascii_lowercase().as_str(),
+            "-" | "none" | "skip" | "no"
+        )
+    {
+        None
+    } else {
+        Some(t.to_string())
+    }
+}
 
 pub struct Options {
     pub path: PathBuf,
@@ -64,6 +104,8 @@ struct Wizard {
     exports: Vec<String>,
     /// Commands the user still has to run.
     later: Vec<String>,
+    /// Apps found on this machine (pre-ticked).
+    detected: Detected,
 }
 
 fn err(e: dialoguer::Error) -> String {
@@ -75,12 +117,18 @@ pub fn run(opts: Options) -> Result<Outcome, String> {
         return Err(NO_TTY.into());
     }
     let keychain = cfg!(target_os = "macos") || opts.demo;
+    let detected = if opts.demo {
+        demo_detected()
+    } else {
+        detect::detect()
+    };
     let mut w = Wizard {
         opts,
         theme: ColorfulTheme::default(),
         keychain,
         exports: Vec::new(),
         later: Vec::new(),
+        detected,
     };
     w.run()
 }
@@ -116,26 +164,55 @@ impl Wizard {
         }
 
         let mut answers = Answers::default();
+        let ticks = preticked(&self.detected);
+        let found = !self.detected.is_empty();
         self.step(
             "1/4",
             "Which apps do you use?",
-            "Space to select, Enter to continue.",
+            if found {
+                "Press Space to select, Enter to continue. Apps found on this Mac are pre-ticked."
+            } else {
+                "Press Space to select, Enter to continue."
+            },
         );
         let labels: Vec<String> = APPS
             .iter()
-            .map(|a| {
+            .zip(&ticks)
+            .map(|(a, &found)| {
+                let mut l = a.name.to_string();
                 if a.macos_only {
-                    format!("{} {}", a.name, "(macOS)".dimmed())
-                } else {
-                    a.name.to_string()
+                    l.push_str(&format!(" {}", "(macOS)".dimmed()));
                 }
+                if found {
+                    l.push_str(&format!(" {}", "· found".green()));
+                }
+                l
             })
             .collect();
-        let picked = MultiSelect::with_theme(&self.theme)
-            .with_prompt("Task apps")
-            .items(&labels)
-            .interact()
-            .map_err(err)?;
+        let mut picked = Vec::new();
+        for attempt in 0..2 {
+            picked = MultiSelect::with_theme(&self.theme)
+                .with_prompt("Task apps")
+                .items(&labels)
+                .defaults(&ticks)
+                .interact()
+                .map_err(err)?;
+            if !picked.is_empty() {
+                break;
+            }
+            if attempt == 0 {
+                eprintln!(
+                    "  {} Nothing selected. Press {} to tick an app, then Enter. (Enter again with nothing ticked to skip task apps.)",
+                    "!".yellow(),
+                    "Space".bold()
+                );
+            } else {
+                eprintln!(
+                    "  {} No task apps for now. Run `daypeek setup` again any time to add one.",
+                    "–".dimmed()
+                );
+            }
+        }
         for i in picked {
             let app = &APPS[i];
             if app.macos_only && !cfg!(target_os = "macos") && !self.opts.demo {
@@ -183,16 +260,25 @@ impl Wizard {
         }
 
         self.step("3/4", "Weather", "Free from Open-Meteo, no key needed.");
-        let city: String = Input::with_theme(&self.theme)
-            .with_prompt("Your city (Enter to skip)")
-            .allow_empty(true)
-            .interact_text()
-            .map_err(err)?;
-        if !city.trim().is_empty() {
+        let tz = crate::snapshot::system_tz();
+        let guess = detect::city_from_timezone(tz.name());
+        let mut city_prompt = Input::<String>::with_theme(&self.theme).allow_empty(true);
+        city_prompt = match &guess {
+            Some(g) => city_prompt
+                .with_prompt(format!(
+                    "Your city (Enter = {g}, from your time zone; `none` skips)"
+                ))
+                .default(g.clone())
+                .show_default(false),
+            None => city_prompt.with_prompt("Your city (Enter to skip)"),
+        };
+        let city = city_prompt.interact_text().map_err(err)?;
+        if let Some(city) = city_answer(&city) {
+            let metric_first = !tz.name().starts_with("America/");
             let u = Select::with_theme(&self.theme)
                 .with_prompt("Units")
                 .items(&["°F  (imperial)", "°C  (metric)"])
-                .default(0)
+                .default(usize::from(metric_first))
                 .interact()
                 .map_err(err)?;
             answers.units = if u == 0 {
@@ -200,7 +286,7 @@ impl Wizard {
             } else {
                 Units::Metric
             };
-            answers.city = Some(city.trim().to_string());
+            answers.city = Some(city);
         }
 
         let text = setup::render_config(&answers);
@@ -340,11 +426,20 @@ impl Wizard {
             "things" => AppConfig::Things,
             "reminders" => AppConfig::Reminders,
             "obsidian" => {
-                let vault = self.path_prompt("Vault folder", "~/Documents/Obsidian", true)?;
-                let daily = if expand_tilde(&vault).join("Daily").is_dir() {
-                    "Daily"
-                } else {
-                    ""
+                let found = self.detected.vaults.first().cloned();
+                let default_vault = found
+                    .as_ref()
+                    .map(|v| tilde(&v.path))
+                    .unwrap_or_else(|| "~/Documents/Obsidian".into());
+                let vault = self.path_prompt("Vault folder", &default_vault, true)?;
+                let same = found
+                    .as_ref()
+                    .filter(|v| expand_tilde(&vault) == v.path)
+                    .cloned();
+                let daily = match &same {
+                    Some(v) => v.daily_notes_folder.clone(),
+                    None if expand_tilde(&vault).join("Daily").is_dir() => "Daily".into(),
+                    None => String::new(),
                 };
                 let daily_notes_folder: String = Input::with_theme(t)
                     .with_prompt("Daily notes folder inside the vault (Enter = vault root)")
@@ -355,6 +450,9 @@ impl Wizard {
                 AppConfig::Obsidian {
                     vault,
                     daily_notes_folder,
+                    daily_note_format: same
+                        .map(|v| v.daily_note_format)
+                        .filter(|f| f != "%Y-%m-%d"),
                 }
             }
             "todotxt" => AppConfig::TodoTxt {
@@ -534,12 +632,25 @@ pub fn write_config(path: &Path, text: &str) -> Result<(), String> {
         let bak = path.with_extension("toml.bak");
         std::fs::copy(path, &bak).map_err(|e| format!("{}: {e}", bak.display()))?;
     }
-    std::fs::write(path, text).map_err(|e| format!("{}: {e}", path.display()))?;
+    // Created owner-only from the first byte (it may hold a client id or a
+    // token someone pasted in), and tightened if it already existed.
+    let mut open = std::fs::OpenOptions::new();
+    open.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        open.mode(0o600);
+    }
+    let mut file = open
+        .open(path)
+        .map_err(|e| format!("{}: {e}", path.display()))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+        let _ = file.set_permissions(std::fs::Permissions::from_mode(0o600));
     }
+    std::io::Write::write_all(&mut file, text.as_bytes())
+        .map_err(|e| format!("{}: {e}", path.display()))?;
     Ok(())
 }
 
@@ -577,6 +688,43 @@ mod tests {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&path).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o600);
+        }
+    }
+
+    #[test]
+    fn detected_apps_are_preticked() {
+        let none = preticked(&Detected::default());
+        assert!(none.iter().all(|t| !t));
+        let ticks = preticked(&demo_detected());
+        let on: Vec<&str> = APPS
+            .iter()
+            .zip(&ticks)
+            .filter(|(_, t)| **t)
+            .map(|(a, _)| a.id)
+            .collect();
+        assert_eq!(on, vec!["things", "obsidian"]);
+    }
+
+    #[test]
+    fn city_answers() {
+        assert_eq!(city_answer(" New York "), Some("New York".into()));
+        assert_eq!(city_answer(""), None);
+        assert_eq!(city_answer("none"), None);
+        assert_eq!(city_answer("-"), None);
+    }
+
+    #[test]
+    fn write_config_is_private_even_when_replacing_a_public_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "old").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+            write_config(&path, "new").unwrap();
             let mode = std::fs::metadata(&path).unwrap().permissions().mode();
             assert_eq!(mode & 0o777, 0o600);
         }

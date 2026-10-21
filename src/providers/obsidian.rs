@@ -213,6 +213,7 @@ mod tests {
         let ctx = Ctx {
             http: &http,
             today: NaiveDate::from_ymd_opt(2026, 10, 21).unwrap(),
+            until: NaiveDate::from_ymd_opt(2026, 10, 21).unwrap(),
             tz: chrono_tz::America::New_York,
         };
         let out = p.fetch(&ctx).unwrap();

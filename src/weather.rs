@@ -6,7 +6,8 @@ use crate::cache::Cache;
 use crate::config::{Units, WeatherConfig};
 use crate::error::{Error, Result};
 use crate::http::{enc, Http};
-use crate::model::Weather;
+use crate::model::{DayForecast, Weather};
+use chrono::NaiveDate;
 
 /// Human-readable condition and a single-width glyph for a WMO weather code.
 pub fn describe(code: u8) -> (&'static str, &'static str) {
@@ -189,6 +190,10 @@ struct Current {
 
 #[derive(Deserialize)]
 struct Daily {
+    #[serde(default)]
+    time: Vec<String>,
+    #[serde(default)]
+    weather_code: Vec<Option<u8>>,
     temperature_2m_max: Vec<Option<f64>>,
     temperature_2m_min: Vec<Option<f64>>,
     #[serde(default)]
@@ -199,6 +204,32 @@ struct Daily {
 pub fn from_forecast(place: &str, units: Units, f: ForecastResponse) -> Weather {
     let (condition, _) = describe(f.current.weather_code);
     let first = |v: &Vec<Option<f64>>| v.first().copied().flatten();
+    let pct = |p: f64| p.round().clamp(0.0, 100.0) as u8;
+    let d = &f.daily;
+    let days = d
+        .time
+        .iter()
+        .enumerate()
+        .filter_map(|(i, t)| {
+            let date = NaiveDate::parse_from_str(t, "%Y-%m-%d").ok()?;
+            let high = d.temperature_2m_max.get(i).copied().flatten()?;
+            let low = d.temperature_2m_min.get(i).copied().flatten()?;
+            let code = d.weather_code.get(i).copied().flatten().unwrap_or(0);
+            Some(DayForecast {
+                date,
+                high,
+                low,
+                code,
+                condition: describe(code).0.to_string(),
+                precip_chance: d
+                    .precipitation_probability_max
+                    .get(i)
+                    .copied()
+                    .flatten()
+                    .map(pct),
+            })
+        })
+        .collect();
     Weather {
         place: place.to_string(),
         temperature: f.current.temperature_2m,
@@ -206,12 +237,12 @@ pub fn from_forecast(place: &str, units: Units, f: ForecastResponse) -> Weather 
         low: first(&f.daily.temperature_2m_min).unwrap_or(f.current.temperature_2m),
         code: f.current.weather_code,
         condition: condition.to_string(),
-        precip_chance: first(&f.daily.precipitation_probability_max)
-            .map(|p| p.round().clamp(0.0, 100.0) as u8),
+        precip_chance: first(&f.daily.precipitation_probability_max).map(pct),
         unit: match units {
             Units::Imperial => "°F".into(),
             Units::Metric => "°C".into(),
         },
+        days,
     }
 }
 
@@ -246,8 +277,8 @@ pub fn fetch(http: &Http, cache: &Cache, cfg: &WeatherConfig) -> Result<Weather>
     let url = format!(
         "https://api.open-meteo.com/v1/forecast?latitude={:.4}&longitude={:.4}\
          &current=temperature_2m,weather_code\
-         &daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max\
-         &temperature_unit={unit}&timezone=auto&forecast_days=1",
+         &daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max\
+         &temperature_unit={unit}&timezone=auto&forecast_days=7",
         place.latitude, place.longitude
     );
     let f: ForecastResponse = http.get_json(&url, None)?;
@@ -290,6 +321,13 @@ mod tests {
         assert_eq!(w.condition, "Partly cloudy");
         assert_eq!(w.precip_chance, Some(10));
         assert_eq!(w.unit, "°F");
+        assert_eq!(w.days.len(), 7);
+        let tomorrow = w
+            .day(NaiveDate::from_ymd_opt(2026, 10, 22).unwrap())
+            .unwrap();
+        assert_eq!((tomorrow.high, tomorrow.low), (71.6, 49.8));
+        assert_eq!(tomorrow.condition, "Rain");
+        assert_eq!(tomorrow.precip_chance, Some(70));
     }
 
     #[test]

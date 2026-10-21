@@ -76,13 +76,14 @@ pub fn parse(json: &str, source: &str) -> Result<Vec<Task>> {
 }
 
 #[cfg(target_os = "macos")]
-fn run_bridge(lists: &[String], timeout: std::time::Duration) -> Result<String> {
+fn run_bridge(lists: &[String], days: i64, timeout: std::time::Duration) -> Result<String> {
     use std::io::Read;
     use std::process::{Command, Stdio};
     use std::time::Instant;
 
     let mut child = Command::new("/usr/bin/osascript")
         .args(["-l", "JavaScript", "-e", BRIDGE_JS])
+        .arg(format!("--days={days}"))
         .args(lists)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -120,7 +121,7 @@ fn run_bridge(lists: &[String], timeout: std::time::Duration) -> Result<String> 
 }
 
 #[cfg(not(target_os = "macos"))]
-fn run_bridge(_lists: &[String], _timeout: std::time::Duration) -> Result<String> {
+fn run_bridge(_lists: &[String], _days: i64, _timeout: std::time::Duration) -> Result<String> {
     Err(Error::Unsupported("Apple Reminders is macOS-only".into()))
 }
 
@@ -146,9 +147,10 @@ impl Provider for Reminders {
         }
     }
 
-    fn fetch(&self, _ctx: &Ctx) -> Result<Output> {
+    fn fetch(&self, ctx: &Ctx) -> Result<Output> {
         let json = run_bridge(
             &self.s.lists,
+            ctx.days(),
             std::time::Duration::from_secs(self.s.timeout_secs.max(1)),
         )?;
         Ok(Output::tasks(parse(&json, &self.id)?))

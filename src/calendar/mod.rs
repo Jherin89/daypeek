@@ -114,6 +114,38 @@ pub fn events_on(text: &str, calendar: &str, day: NaiveDate, tz: Tz) -> Vec<Even
     out
 }
 
+/// Every event overlapping any local day in `start..=end`, each listed once.
+pub fn events_between(
+    text: &str,
+    calendar: &str,
+    start: NaiveDate,
+    end: NaiveDate,
+    tz: Tz,
+) -> Vec<Event> {
+    let mut out: Vec<Event> = Vec::new();
+    let mut day = start;
+    while day <= end {
+        for e in events_on(text, calendar, day, tz) {
+            if !out.contains(&e) {
+                out.push(e);
+            }
+        }
+        day += Duration::days(1);
+    }
+    sort_events(&mut out);
+    out
+}
+
+/// Does `e` overlap local day `day`? (Used to group a week's events.)
+pub fn overlaps_day(e: &Event, day: NaiveDate, tz: Tz) -> bool {
+    let (ws, we) = day_window(day, tz);
+    if e.start == e.end {
+        e.start >= ws && e.start < we
+    } else {
+        e.start < we && e.end > ws
+    }
+}
+
 pub fn sort_events(events: &mut [Event]) {
     events.sort_by(|a, b| {
         b.all_day

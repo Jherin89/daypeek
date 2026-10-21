@@ -156,7 +156,7 @@ impl Provider for GTasks {
             &format!("{base}/users/@me/lists?maxResults=100"),
             Some(&token),
         )?;
-        let due_max = format!("{}T23:59:59.000Z", ctx.today.format("%Y-%m-%d"));
+        let due_max = format!("{}T23:59:59.000Z", ctx.until.format("%Y-%m-%d"));
         let mut tasks = Vec::new();
         for list in lists.items {
             if !self.s.lists.is_empty()

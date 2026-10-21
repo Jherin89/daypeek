@@ -33,6 +33,10 @@ pub struct General {
     pub cache_dir: Option<String>,
     /// Max tasks shown in the full view (JSON always has everything).
     pub max_tasks: usize,
+    /// Reuse cloud results fetched less than this many minutes ago, so a
+    /// `daypeek --compact` in every new terminal is instant. 0 = always
+    /// fetch. `--refresh` forces a fetch.
+    pub cache_minutes: u64,
 }
 
 impl Default for General {
@@ -43,6 +47,7 @@ impl Default for General {
             timeout_secs: 4,
             cache_dir: None,
             max_tasks: 15,
+            cache_minutes: 5,
         }
     }
 }
@@ -167,15 +172,18 @@ pub fn default_cache_dir() -> Option<PathBuf> {
 }
 
 /// Written by `daypeek --init`. Must always parse (see tests).
-pub const SAMPLE_CONFIG: &str = r#"# daypeek — config. Setup guide: https://github.com/Jherin89/daypeek/blob/main/docs/SETUP.md
-# Secrets never belong in this file if you can avoid it: prefer env vars or
-# the macOS Keychain (see docs/SETUP.md, "Credentials").
+pub const SAMPLE_CONFIG: &str = r#"# daypeek config. Everything below is commented out: uncomment what you use.
+# Easiest path: run `daypeek setup` and it writes this file for you.
+# Setup guide: https://github.com/Jherin89/daypeek/blob/main/docs/SETUP.md
+# Keep secrets out of this file: prefer env vars or the macOS Keychain
+# (see docs/SETUP.md, "Credentials").
 
-[general]
-# timezone = "America/New_York"   # default: system time zone
-time_format = "12h"                # or "24h"
-timeout_secs = 4                   # per network request
-max_tasks = 15
+# [general]
+# timezone = "America/New_York"   # default: your system time zone
+# time_format = "12h"             # or "24h"
+# timeout_secs = 4                # per network request
+# max_tasks = 15
+# cache_minutes = 5               # reuse results this fresh (0 = always fetch)
 
 # ── Calendars ─────────────────────────────────────────────────────────────
 # Any iCal (.ics) feed. For Google Calendar use the calendar's
@@ -189,19 +197,18 @@ max_tasks = 15
 # url  = "webcal://example.com/holidays.ics"
 
 # ── Weather (Open-Meteo, no API key) ──────────────────────────────────────
-[weather]
-city  = "Evans, Georgia"
-units = "imperial"                 # or "metric"
-# latitude = 33.5337               # lat/lon skip geocoding
-# longitude = -82.1307
+# [weather]
+# city  = "Your City, Region"     # e.g. "Portland, Oregon" or "Leeds, UK"
+# units = "imperial"              # or "metric"
+# latitude = 45.52                # lat/lon skip the city lookup
+# longitude = -122.68
 
 # ── Task providers ────────────────────────────────────────────────────────
 # Enable as many as you like; tasks are merged and de-duplicated.
 
-[providers.todoist]
-# Token from Todoist → Settings → Integrations → Developer.
-# Read from $DAYPEEK_TODOIST_TOKEN or $TODOIST_API_TOKEN, or Keychain item "daypeek-todoist".
-filter = "today | overdue"
+# [providers.todoist]             # token: Todoist → Settings → Integrations → Developer
+# # Read from $DAYPEEK_TODOIST_TOKEN or $TODOIST_API_TOKEN, or Keychain item "daypeek-todoist".
+# filter = "today | overdue"      # used by the today view
 
 # [providers.ticktick]            # $TICKTICK_ACCESS_TOKEN  (see `daypeek auth ticktick`)
 # projects = []                   # empty = inbox + all projects
@@ -243,15 +250,29 @@ mod tests {
     use super::*;
 
     #[test]
-    fn sample_config_parses() {
+    fn sample_config_is_neutral_and_all_commented() {
+        // Parses to pure defaults: nothing is switched on by accident.
         let c = Config::parse(SAMPLE_CONFIG).unwrap();
-        assert_eq!(c.general.timeout_secs, 4);
-        assert_eq!(c.general.time_format, TimeFormat::H12);
-        let w = c.weather().unwrap();
-        assert_eq!(w.city.as_deref(), Some("Evans, Georgia"));
-        assert_eq!(w.units, Units::Imperial);
-        assert!(c.providers.contains_key("todoist"));
-        assert!(c.calendars.is_empty());
+        assert_eq!(c, Config::default());
+        assert!(c.weather().is_none() && c.providers.is_empty());
+        for line in SAMPLE_CONFIG.lines() {
+            let t = line.trim();
+            assert!(t.is_empty() || t.starts_with('#'), "uncommented: {line}");
+        }
+        assert!(!SAMPLE_CONFIG.contains("Evans"), "no personal defaults");
+        // Every commented example is valid once uncommented.
+        let uncommented: String = SAMPLE_CONFIG
+            .lines()
+            .filter_map(|l| l.strip_prefix("# "))
+            .filter(|l| l.starts_with('[') || l.contains(" = ") || l.contains("  = "))
+            .filter(|l| {
+                !l.starts_with("[[calendars]]") && !l.starts_with("name") && !l.starts_with("url")
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        let c = Config::parse(&uncommented).unwrap_or_else(|e| panic!("{e}\n{uncommented}"));
+        assert_eq!(c.general.cache_minutes, 5);
+        assert!(c.providers.contains_key("todoist") && c.weather().is_some());
     }
 
     #[test]

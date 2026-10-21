@@ -113,6 +113,28 @@ pub struct Weather {
     pub precip_chance: Option<u8>,
     /// "°F" or "°C".
     pub unit: String,
+    /// Daily forecast starting today (up to 7 days), for `tomorrow` / `week`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub days: Vec<DayForecast>,
+}
+
+/// One day of the forecast.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DayForecast {
+    pub date: NaiveDate,
+    pub high: f64,
+    pub low: f64,
+    pub code: u8,
+    pub condition: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub precip_chance: Option<u8>,
+}
+
+impl Weather {
+    /// The forecast for `date`, if the fetched range covers it.
+    pub fn day(&self, date: NaiveDate) -> Option<&DayForecast> {
+        self.days.iter().find(|d| d.date == date)
+    }
 }
 
 /// Freshness metadata attached to each section.
@@ -121,6 +143,9 @@ pub struct Weather {
 pub enum Freshness {
     /// Fetched just now.
     Live,
+    /// Fetched successfully a few minutes ago and reused (see
+    /// `general.cache_minutes`); as trustworthy as live, so no marker.
+    Cached { fetched_at: DateTime<Utc> },
     /// Fetch failed; showing a cached copy from `fetched_at`.
     Stale {
         fetched_at: DateTime<Utc>,
@@ -133,6 +158,11 @@ pub enum Freshness {
 impl Freshness {
     pub fn is_live(&self) -> bool {
         matches!(self, Freshness::Live)
+    }
+
+    /// Live or recently cached: the data is current, show no stale marker.
+    pub fn is_ok(&self) -> bool {
+        matches!(self, Freshness::Live | Freshness::Cached { .. })
     }
 }
 

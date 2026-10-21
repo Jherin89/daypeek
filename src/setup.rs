@@ -162,6 +162,8 @@ pub enum AppConfig {
     Obsidian {
         vault: String,
         daily_notes_folder: String,
+        /// Only when it differs from the default `%Y-%m-%d`.
+        daily_note_format: Option<String>,
     },
     TodoTxt {
         path: String,
@@ -279,6 +281,7 @@ pub fn render_config(a: &Answers) -> String {
             AppConfig::Obsidian {
                 vault,
                 daily_notes_folder,
+                daily_note_format,
             } => {
                 let _ = writeln!(
                     out,
@@ -286,6 +289,9 @@ pub fn render_config(a: &Answers) -> String {
                     q(vault),
                     q(daily_notes_folder)
                 );
+                if let Some(f) = daily_note_format {
+                    let _ = writeln!(out, "daily_note_format = {}", q(f));
+                }
             }
             AppConfig::TodoTxt { path } => {
                 let _ = writeln!(out, "path = {}", q(path));
@@ -375,6 +381,7 @@ mod tests {
                 AppConfig::Obsidian {
                     vault: "~/Vault".into(),
                     daily_notes_folder: "Daily".into(),
+                    daily_note_format: Some("%Y-%m-%d %A".into()),
                 },
                 AppConfig::TodoTxt {
                     path: "~/todo.txt".into(),

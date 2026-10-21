@@ -145,7 +145,7 @@ impl Provider for Todoist {
             let mut url = format!(
                 "{}/api/v1/tasks/filter?query={}&limit=200",
                 self.s.base_url.trim_end_matches('/'),
-                enc(&self.s.filter)
+                enc(&query_for(&self.s.filter, ctx))
             );
             if let Some(c) = &cursor {
                 url.push_str(&format!("&cursor={}", enc(c)));
@@ -158,6 +158,16 @@ impl Provider for Todoist {
             }
         }
         Ok(Output::tasks(tasks))
+    }
+}
+
+/// The Todoist filter for the current view. Your `filter` setting drives the
+/// default (today) view; `tomorrow` and `week` use Todoist's own date
+/// keywords: <https://todoist.com/help/articles/introduction-to-filters-V98wIH>
+pub fn query_for(filter: &str, ctx: &Ctx) -> String {
+    match ctx.days() {
+        1 => filter.to_string(),
+        n => format!("overdue | {n} days"),
     }
 }
 

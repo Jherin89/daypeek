@@ -12,37 +12,43 @@ use daypeek::config::{self, Config};
 use daypeek::http::Http;
 use daypeek::providers::{self, Ctx, Health};
 use daypeek::render::{self, Style};
-use daypeek::{calendar, demo, oauth, secrets, snapshot, weather};
+use daypeek::snapshot::View;
+use daypeek::{calendar, demo, detect, oauth, secrets, snapshot, weather};
 
 /// A fast one-screen daily dashboard: calendar, tasks from every app, weather.
 #[derive(Parser)]
 #[command(name = "daypeek", version, about, long_about = None)]
 struct Cli {
     /// Short 2–3 line summary (for shell startup)
-    #[arg(long, conflicts_with = "json")]
+    #[arg(long, conflicts_with = "json", global = true)]
     compact: bool,
 
     /// Machine-readable JSON
-    #[arg(long)]
+    #[arg(long, global = true)]
     json: bool,
 
     /// Show fake demo data (no accounts or network needed)
-    #[arg(long)]
+    #[arg(long, global = true)]
     demo: bool,
 
     /// Don't touch the network; show cached data
-    #[arg(long)]
+    #[arg(long, global = true)]
     offline: bool,
 
+    /// Fetch everything now instead of reusing results from the last few
+    /// minutes (see `cache_minutes`)
+    #[arg(long, conflicts_with = "offline", global = true)]
+    refresh: bool,
+
     /// With --demo: show the offline / stale-cache state
-    #[arg(long, requires = "demo", hide = true)]
+    #[arg(long, requires = "demo", hide = true, global = true)]
     demo_offline: bool,
 
-    /// Write a sample config to ~/.config/daypeek/config.toml
+    /// Write a commented sample config to ~/.config/daypeek/config.toml
     #[arg(long)]
     init: bool,
 
-    /// With --init: overwrite an existing config
+    /// With --init: overwrite an existing config (the old one is kept as .bak)
     #[arg(long, requires = "init")]
     force: bool,
 
@@ -55,7 +61,7 @@ struct Cli {
     color: ColorWhen,
 
     /// Pretend it is this instant (RFC 3339) — for screenshots and tests
-    #[arg(long, value_name = "RFC3339", hide = true)]
+    #[arg(long, value_name = "RFC3339", hide = true, global = true)]
     at: Option<String>,
 
     #[command(subcommand)]
@@ -64,6 +70,12 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Today's dashboard (the default when you run plain `daypeek`)
+    Today,
+    /// Tomorrow: events, tasks due tomorrow, and the forecast
+    Tomorrow,
+    /// The next seven days, one block per day
+    Week,
     /// Guided first-run setup: pick your apps, paste tokens, write the config
     Setup {
         /// Loopback port for browser sign-in (TickTick, Microsoft, Google)
@@ -71,11 +83,7 @@ enum Command {
         port: u16,
     },
     /// List configured providers and check that each one works
-    Providers {
-        /// Machine-readable JSON
-        #[arg(long)]
-        json: bool,
-    },
+    Providers,
     /// One-time OAuth helper for ticktick, mstodo, or gtasks (bring your own app)
     Auth {
         /// Provider id from your config, e.g. `gtasks`
@@ -135,7 +143,8 @@ fn run(cli: Cli) -> Result<(), String> {
     };
 
     // A broken config must not break your shell prompt: warn and use defaults.
-    let cfg = match Config::load(&path) {
+    let have_config = path.exists();
+    let mut cfg = match Config::load(&path) {
         Ok(c) => c,
         Err(_) if cli.demo => Config::default(),
         Err(e) => {
@@ -143,26 +152,54 @@ fn run(cli: Cli) -> Result<(), String> {
             Config::default()
         }
     };
-
-    match cli.command {
-        Some(Command::Providers { json }) if cli.demo => {
-            return print_providers(demo::provider_rows(), json)
+    if !cli.demo {
+        if let Some(w) = snapshot::timezone_warning(&cfg) {
+            eprintln!("daypeek: {w}");
         }
-        Some(Command::Providers { json }) => return providers_cmd(&cfg, json),
-        Some(Command::Auth { provider, port }) => return auth_cmd(&cfg, &provider, port),
-        Some(Command::Setup { .. }) | None => {}
     }
+
+    // No config at all: use whatever lives on this Mac (Things, Obsidian).
+    let mut found = None;
+    if !have_config && !cli.demo {
+        let d = detect::detect();
+        if !d.is_empty() {
+            cfg = d.to_config();
+            found = Some(d.summary());
+        }
+    }
+
+    let view = match cli.command {
+        Some(Command::Providers) if cli.demo => {
+            return print_providers(demo::provider_rows(), cli.json)
+        }
+        Some(Command::Providers) => return providers_cmd(&cfg, cli.json),
+        Some(Command::Auth { provider, port }) => return auth_cmd(&cfg, &provider, port),
+        Some(Command::Tomorrow) => View::Tomorrow,
+        Some(Command::Week) => View::Week,
+        Some(Command::Today) | Some(Command::Setup { .. }) | None => View::Today,
+    };
 
     let snap = if cli.demo {
         let tz = snapshot::resolve_tz(&cfg);
         if cli.demo_offline {
-            demo::offline_snapshot(now.with_timezone(&tz))
+            demo::offline_snapshot(now.with_timezone(&tz), view)
         } else {
-            demo::snapshot(now.with_timezone(&tz))
+            demo::snapshot(now.with_timezone(&tz), view)
         }
     } else {
-        let cache = Cache::new(cfg.cache_dir(), cli.offline);
-        snapshot::gather(&cfg, &cache, now)
+        let tz = snapshot::resolve_tz(&cfg);
+        let today = now.with_timezone(&tz).date_naive();
+        let mut cache = Cache::new(cfg.cache_dir(), cli.offline);
+        if !cli.refresh {
+            // Shell-startup runs reuse results from the last few minutes, but
+            // never ones fetched before local midnight.
+            let minutes = i64::try_from(cfg.general.cache_minutes).unwrap_or(i64::MAX / 60_000);
+            cache = cache.reuse_recent(
+                chrono::Duration::minutes(minutes.min(7 * 24 * 60)),
+                Some(calendar::day_window(today, tz).0),
+            );
+        }
+        snapshot::gather(&cfg, &cache, now, view)
     };
 
     if cli.json {
@@ -185,6 +222,15 @@ fn run(cli: Cli) -> Result<(), String> {
         println!("{}", render::compact(&snap, &style));
     } else {
         println!("{}", render::full(&snap, &style));
+        if let Some(found) = found {
+            println!(
+                "  {}\n",
+                format!(
+                    "Found {found} on this Mac. Run `daypeek setup` to add calendars and weather."
+                )
+                .dimmed()
+            );
+        }
     }
     Ok(())
 }
@@ -196,13 +242,11 @@ fn init(path: &std::path::Path, force: bool) -> Result<(), String> {
             path.display()
         ));
     }
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    }
-    std::fs::write(path, config::SAMPLE_CONFIG).map_err(|e| format!("{}: {e}", path.display()))?;
+    // Owner-only (0600) like `daypeek setup`, with a .bak of any old file.
+    daypeek::wizard::write_config(path, config::SAMPLE_CONFIG)?;
     println!("Wrote {}", path.display());
     println!(
-        "Next: run `daypeek setup` for guided setup, or edit the file and run `daypeek providers`."
+        "Next: run `daypeek setup` for guided setup, or uncomment what you use and run `daypeek providers`."
     );
     Ok(())
 }
@@ -216,9 +260,19 @@ fn setup_cmd(path: PathBuf, demo: bool, port: u16) -> Result<(), String> {
     })?;
     let rows = match outcome {
         Outcome::Cancelled => return Ok(()),
-        Outcome::Demo(answers) => demo::provider_rows_for(&answers),
+        Outcome::Demo(answers) => {
+            if answers.apps.is_empty() && answers.calendars.is_empty() && answers.city.is_none() {
+                nothing_configured();
+                return Ok(());
+            }
+            demo::provider_rows_for(&answers)
+        }
         Outcome::Written => {
             let cfg = Config::load(&path).map_err(|e| format!("config: {e}"))?;
+            if cfg.calendars.is_empty() && cfg.providers.is_empty() && cfg.weather().is_none() {
+                nothing_configured();
+                return Ok(());
+            }
             println!("Checking every source…");
             return providers_cmd(&cfg, false).map(|()| next_steps());
         }
@@ -231,11 +285,22 @@ fn setup_cmd(path: PathBuf, demo: bool, port: u16) -> Result<(), String> {
 
 fn next_steps() {
     println!(
-        "\n{}\n  {}            your day\n  {}   see what's still missing\n  {}\n",
+        "\n{}\n  {}             your day\n  {}        the next seven days\n  {}   see what's still missing\n  {}\n",
         "You're set. Next:".bold(),
         "daypeek".cyan(),
+        "daypeek week".cyan(),
         "daypeek providers".cyan(),
         "echo 'daypeek --compact' >> ~/.zshrc   # show it in every new terminal".dimmed()
+    );
+}
+
+/// Setup finished with nothing picked: say so plainly (no "You're set").
+fn nothing_configured() {
+    println!(
+        "\n{}\n  {}   run it again when you're ready\n  {}  see what it looks like with sample data\n",
+        "Nothing to show yet: no apps, calendars, or weather were added.".bold(),
+        "daypeek setup".cyan(),
+        "daypeek --demo".cyan(),
     );
 }
 
@@ -246,6 +311,7 @@ fn providers_cmd(cfg: &Config, json: bool) -> Result<(), String> {
     let ctx = Ctx {
         http: &http,
         today,
+        until: today,
         tz,
     };
     let (built, broken) = providers::build_all(cfg);
@@ -318,7 +384,7 @@ fn print_providers(rows: Vec<Row>, json: bool) -> Result<(), String> {
         return Ok(());
     }
     if rows.is_empty() {
-        println!("No providers configured. Run `daypeek --init` to write a sample config.");
+        println!("No sources configured yet. Run `daypeek setup` to add your apps, calendars and weather.");
         return Ok(());
     }
     println!(
@@ -340,12 +406,54 @@ fn print_providers(rows: Vec<Row>, json: bool) -> Result<(), String> {
     Ok(())
 }
 
+/// Why `daypeek auth <kind>` doesn't apply, for providers without OAuth.
+fn auth_not_needed(id: &str, kind: &str) -> Option<String> {
+    let token = |name: &str, env: &str, page: &str| {
+        format!(
+            "{name} doesn't use a browser sign-in: it uses a personal API token.\n  \
+             Get one: {page}\n  \
+             Then {}, or run `daypeek setup` and paste it when asked.",
+            secrets::hint(id, "token", env)
+        )
+    };
+    match kind {
+        "todoist" => Some(token(
+            "Todoist",
+            providers::todoist::TOKEN_ENV,
+            "Todoist → Settings → Integrations → Developer → API token",
+        )),
+        "notion" => Some(token(
+            "Notion",
+            providers::notion::TOKEN_ENV,
+            "https://www.notion.so/profile/integrations (create an internal integration)",
+        )),
+        "things" | "reminders" | "obsidian" | "todotxt" | "markdown" => Some(format!(
+            "{kind} reads data on this computer and needs no sign-in. Add it with `daypeek setup`, then check it with `daypeek providers`."
+        )),
+        _ => None,
+    }
+}
+
 fn auth_cmd(cfg: &Config, id: &str, port: u16) -> Result<(), String> {
-    let table = cfg
-        .providers
-        .get(id)
-        .ok_or_else(|| format!("no [providers.{id}] in your config"))?;
-    let kind = table.get("type").and_then(|v| v.as_str()).unwrap_or(id);
+    let table = cfg.providers.get(id);
+    let kind = table
+        .and_then(|t| t.get("type"))
+        .and_then(|v| v.as_str())
+        .unwrap_or(id);
+    if let Some(msg) = auth_not_needed(id, kind) {
+        return Err(msg);
+    }
+    if !matches!(kind, "ticktick" | "mstodo" | "gtasks") {
+        return Err(format!(
+            "`daypeek auth` signs in to ticktick, mstodo, or gtasks; {kind:?} isn't one of them. See `daypeek providers`."
+        ));
+    }
+    let table = table.ok_or_else(|| {
+        format!(
+            "no [providers.{id}] in your config yet. Run `daypeek setup` (it signs you in too), \
+             or add the block from https://github.com/Jherin89/daypeek/blob/main/docs/SETUP.md#{kind}"
+        )
+    })?;
     let client_id_cfg = table.get("client_id").and_then(|v| v.as_str());
     let env_prefix = kind.to_uppercase();
     let client_id = std::env::var(format!("{env_prefix}_CLIENT_ID"))
