@@ -59,6 +59,48 @@ pub fn keychain(_service: &str) -> Option<String> {
     None
 }
 
+/// Save a secret in the macOS login Keychain (replacing any existing item),
+/// then read it back to confirm.
+///
+/// The value is passed on `security -i`'s stdin rather than as an argument, so
+/// it never shows up in the process list.
+#[cfg(target_os = "macos")]
+pub fn store_keychain(service: &str, value: &str) -> Result<(), String> {
+    use std::io::Write;
+    if value.is_empty()
+        || value
+            .chars()
+            .any(|c| c == '"' || c == '\\' || c.is_control())
+    {
+        return Err("this value has characters the Keychain helper can't pass safely".into());
+    }
+    let account = std::env::var("USER").unwrap_or_else(|_| "daypeek".into());
+    let mut child = std::process::Command::new("/usr/bin/security")
+        .arg("-i")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map_err(|e| format!("security: {e}"))?;
+    if let Some(mut stdin) = child.stdin.take() {
+        writeln!(
+            stdin,
+            "add-generic-password -U -s \"{service}\" -a \"{account}\" -l \"{service}\" -w \"{value}\""
+        )
+        .map_err(|e| format!("security: {e}"))?;
+    }
+    child.wait().map_err(|e| format!("security: {e}"))?;
+    match keychain(service) {
+        Some(v) if v == value => Ok(()),
+        _ => Err(format!("couldn't confirm Keychain item \"{service}\"")),
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn store_keychain(_service: &str, _value: &str) -> Result<(), String> {
+    Err("the Keychain is only available on macOS".into())
+}
+
 /// Short description of where a secret can come from, for error hints.
 pub fn hint(instance: &str, name: &str, env_var: &str) -> String {
     if cfg!(target_os = "macos") {

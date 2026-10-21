@@ -15,6 +15,8 @@ pub mod oauth;
 pub mod providers;
 pub mod render;
 pub mod secrets;
+pub mod setup;
 pub mod snapshot;
 pub mod tasks;
 pub mod weather;
+pub mod wizard;

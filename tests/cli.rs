@@ -249,3 +249,18 @@ fn demo_providers_and_offline_variants() {
     let (ok, _, err) = run(&["--demo-offline"]);
     assert!(!ok, "--demo-offline requires --demo: {err}");
 }
+
+#[test]
+fn setup_without_a_terminal_exits_with_a_hint() {
+    let out = daypeek()
+        .args(["setup"])
+        .stdin(std::process::Stdio::null())
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        err.contains("needs a terminal") && err.contains("daypeek --init"),
+        "{err}"
+    );
+}

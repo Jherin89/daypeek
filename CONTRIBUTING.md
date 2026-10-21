@@ -49,7 +49,8 @@ pub trait Provider: Send + Sync {
 9. **Docs.** Add a row to the "Supported apps" table in the README, a numbered
    setup section to [`docs/SETUP.md`](docs/SETUP.md) that links the app's
    official docs, a commented block to `SAMPLE_CONFIG` in `src/config.rs`,
-   and a line under "Unreleased" in [`CHANGELOG.md`](CHANGELOG.md).
+   an entry in `setup::APPS` (plus its prompts in `src/wizard.rs`) so
+   `daypeek setup` offers it, and a line under "Unreleased" in [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Running locally
 
@@ -58,6 +59,7 @@ cargo run -- --demo                  # fake data, no config needed
 cargo run -- --config ./my.toml      # a scratch config
 cargo run -- providers               # health check for whatever you configured
 python3 scripts/screenshot.py        # re-render the README screenshots (needs Chrome + jq)
+vhs docs/demo.tape && vhs docs/setup.tape   # re-render the GIFs and the wizard screenshot
 ```
 
 ## Ground rules

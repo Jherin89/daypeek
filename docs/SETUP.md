@@ -1,13 +1,21 @@
 # Setup guide
 
-This walks you from nothing to a working `daypeek` in your shell startup. Each
-step ends with a way to check it worked. You only need to set up the apps you
-actually use.
+This takes you from nothing to `daypeek` running every time you open a
+terminal. **Most people only need three commands:**
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Jherin89/daypeek/main/install.sh | sh
+daypeek --demo
+daypeek setup
+```
+
+The rest of this page covers the details and the manual alternative. You only
+need the sections for apps you actually use.
 
 - [1. Install](#1-install)
 - [2. Try the demo](#2-try-the-demo)
-- [3. Create your config](#3-create-your-config)
-- [4. Connect your apps](#4-connect-your-apps)
+- [3. Run the setup wizard](#3-run-the-setup-wizard) (recommended), or [write the config by hand](#or-write-the-config-by-hand)
+- [4. Connect your apps manually](#4-connect-your-apps) (what the wizard does, step by step)
   - [Credentials: env vars or the macOS Keychain](#credentials)
   - Cloud: [Todoist](#todoist) · [TickTick](#ticktick) · [Microsoft To Do](#microsoft-to-do) · [Google Tasks](#google-tasks) · [Notion](#notion)
   - macOS: [Things 3](#things-3) · [Apple Reminders](#apple-reminders)
@@ -21,7 +29,19 @@ actually use.
 
 ## 1. Install
 
-### Option A: prebuilt binary (macOS Apple Silicon or Linux x86_64)
+### Option A: one-line installer (macOS Apple Silicon or Linux x86_64)
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Jherin89/daypeek/main/install.sh | sh
+```
+
+The [script](../install.sh) downloads the latest release for your platform,
+checks its SHA-256, installs to `~/.local/bin` (or `/usr/local/bin`), and tells
+you if that folder isn't on your `PATH`. Options go after `sh -s --`, for
+example `… | sh -s -- --dir ~/bin` or `--version v0.1.0`. If there's no release
+for your platform yet, it prints the Cargo command from Option C instead.
+
+### Option B: download the binary yourself
 
 1. Open [Releases](https://github.com/Jherin89/daypeek/releases) and download
    `daypeek-aarch64-apple-darwin.tar.gz` (Mac with an M-series chip) or
@@ -29,14 +49,14 @@ actually use.
 2. Verify and unpack it:
 
    ```sh
-   shasum -a 256 -c daypeek-aarch64-apple-darwin.tar.gz.sha256   # Linux: sha256sum -c …
+   shasum -a 256 -c daypeek-aarch64-apple-darwin.sha256   # Linux: sha256sum -c …
    tar xzf daypeek-aarch64-apple-darwin.tar.gz
    ```
 
 3. Put it on your `PATH`:
 
    ```sh
-   mkdir -p ~/.local/bin && mv daypeek ~/.local/bin/
+   mkdir -p ~/.local/bin && mv daypeek-aarch64-apple-darwin/daypeek ~/.local/bin/
    # make sure ~/.local/bin is on PATH, e.g. in ~/.zshrc:
    # export PATH="$HOME/.local/bin:$PATH"
    ```
@@ -49,7 +69,7 @@ actually use.
    xattr -d com.apple.quarantine ~/.local/bin/daypeek
    ```
 
-### Option B: build with Cargo
+### Option C: build with Cargo
 
 You need Rust 1.85 or newer. If you don't have Rust yet, install it with
 [rustup](https://rustup.rs):
@@ -90,7 +110,39 @@ daypeek --demo providers    # what the health check looks like
 
 None of these read your config or touch the network.
 
-## 3. Create your config
+## 3. Run the setup wizard
+
+```sh
+daypeek setup
+```
+
+<img src="screenshot-setup.png" alt="daypeek setup: choose apps, paste a hidden token, add a calendar and a city, then a health check" width="640">
+
+<sub>Animated version: [setup.gif](setup.gif) (demo mode, fake input).</sub>
+
+It takes about a minute:
+
+1. **Pick your apps** from a checklist (Space selects, Enter continues).
+2. **For each app**, it shows one line on where to get the credential, plus a
+   link to the official docs, then asks for it:
+   - Tokens are typed with **hidden input**. On macOS they're saved straight to
+     your **Keychain** (`daypeek-<app>`). On Linux the wizard tells you which
+     env var to add to your shell profile, so the token never lands in a file.
+   - TickTick, Microsoft To Do, and Google Tasks ask for your app's client ID
+     and then offer to **sign in in your browser**. The resulting token is stored
+     the same way.
+   - Obsidian, todo.txt, and Markdown just ask for a path. Things and Reminders
+     need nothing.
+3. **Calendars:** paste one or more iCal links ([where to find them](#calendars)).
+4. **Weather:** type your city, or press Enter to skip.
+5. It writes `~/.config/daypeek/config.toml` (readable only by you, with any old
+   file kept as `config.toml.bak`) and runs the [health check](#4-connect-your-apps).
+
+`daypeek --demo setup` walks through the same prompts without saving
+anything. Run `daypeek setup` again any time to change your setup. If it's not
+in a terminal (in a script, say), it exits with a hint instead of hanging.
+
+### Or write the config by hand
 
 ```sh
 daypeek --init
@@ -143,6 +195,9 @@ paths = ["~/work/todo.md"]
 that still needs a token shows `○ auth missing` with a hint telling you what to set.
 
 ## 4. Connect your apps
+
+> `daypeek setup` does all of this for you. Use this section to do it by hand,
+> to change one app later, or to see exactly what the wizard stores.
 
 <a id="credentials"></a>
 ### Credentials: env vars or the macOS Keychain

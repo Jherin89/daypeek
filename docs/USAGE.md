@@ -2,7 +2,7 @@
 
 - [Commands at a glance](#commands-at-a-glance)
 - [Flags](#flags)
-- [Subcommands](#subcommands): [`providers`](#daypeek-providers) · [`auth`](#daypeek-auth)
+- [Subcommands](#subcommands): [`setup`](#daypeek-setup) · [`providers`](#daypeek-providers) · [`auth`](#daypeek-auth)
 - [Reading the dashboard](#reading-the-dashboard)
 - [JSON output and `jq`](#json-output-and-jq)
 - [Environment variables](#environment-variables)
@@ -10,7 +10,7 @@
 - [Troubleshooting and FAQ](#troubleshooting-and-faq)
 - [Privacy](#privacy)
 
-New here? Start with the [setup guide](SETUP.md).
+New here? Run `daypeek setup`, or see the [setup guide](SETUP.md).
 
 ## Commands at a glance
 
@@ -20,6 +20,7 @@ daypeek --compact             # 2–3 line summary, for shell startup
 daypeek --json                # everything as JSON
 daypeek --offline             # cached data only, no network
 daypeek --demo                # fake data (works without a config)
+daypeek setup                 # guided first-run setup (wizard)
 daypeek providers             # health check for every configured source
 daypeek auth <provider>       # one-time OAuth sign-in: ticktick, mstodo, gtasks
 daypeek --init                # write a starter config
@@ -50,6 +51,27 @@ alias dpw='daypeek --config ~/work/daypeek.toml'
 ```
 
 ## Subcommands
+
+### `daypeek setup`
+
+```sh
+daypeek setup [--port 8765]
+daypeek --demo setup          # practice run: same prompts, nothing saved
+```
+
+An interactive wizard that asks for:
+
+1. Your apps (multi-select).
+2. Each app's credential, typed hidden. On macOS it goes into the Keychain; on Linux you're shown the env var to set.
+3. Your calendars' iCal URLs.
+4. A city for weather.
+
+It then writes the config (mode `0600`, keeping a `.bak` of any old one) and
+runs `daypeek providers`. For TickTick, Microsoft To Do, and Google Tasks it
+can run the browser sign-in from [`daypeek auth`](#daypeek-auth) for you.
+`--port` is the loopback port that sign-in uses. With no terminal attached, it
+prints a hint and exits with status 1. Details:
+[setup guide, step 3](SETUP.md#3-run-the-setup-wizard).
 
 ### `daypeek providers`
 

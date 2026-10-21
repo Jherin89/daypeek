@@ -15,7 +15,7 @@ jobs:
         # macos-14 is Apple Silicon: exercises the cfg(target_os = "macos") paths.
         os: [ubuntu-latest, macos-14]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: dtolnay/rust-toolchain@1.85.1
         with:
@@ -34,3 +34,18 @@ jobs:
 
       - name: demo smoke test
         run: cargo run --release -- --demo --compact
+
+  install-script:
+    name: install.sh (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14]
+    steps:
+      - uses: actions/checkout@v5
+      - name: shellcheck
+        if: runner.os == 'Linux'
+        run: shellcheck -s sh install.sh
+      - name: dry run (no release yet → falls back to the cargo hint)
+        run: sh install.sh --dry-run

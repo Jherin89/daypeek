@@ -334,15 +334,18 @@ fn event_line(
         " ".into()
     };
     let time_col = pad(&when, 10);
-    let title = pad(&fit(&e.title, title_w), title_w);
+    let title_fit = fit(&e.title, title_w);
+    let title_pad = " ".repeat(title_w.saturating_sub(title_fit.width()));
+    let title = format!("{title_fit}{title_pad}");
     let status_col = pad(&fit(&status, 18), 19);
     let loc_col = fit(loc, right_w);
     if past {
         format!(
-            "  {} {} {}  {}{}",
+            "  {} {} {}{}  {}{}",
             marker,
             time_col.dimmed(),
-            title.dimmed().strikethrough(),
+            title_fit.dimmed().strikethrough(),
+            title_pad,
             status_col.dimmed(),
             loc_col.dimmed()
         )

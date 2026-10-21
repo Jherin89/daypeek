@@ -23,7 +23,15 @@ All notable changes to this project are documented here. The format follows
 - `daypeek auth` loopback OAuth helper (PKCE where supported) for TickTick,
   Microsoft To Do, and Google Tasks, using your own app registration.
 - Credentials from env vars, the macOS Keychain (`daypeek-<id>`), or the config file.
-- `--demo` fake data, `--init` starter config.
+- `daypeek setup`: a guided wizard. You pick your apps, tokens are typed
+  hidden and saved to the macOS Keychain (on Linux you're shown the env var),
+  it can run the browser sign-in for TickTick, Microsoft To Do, and Google
+  Tasks, asks for calendars and a city, writes the config (`0600`, with a
+  backup of the old one), and runs the health check. `--demo setup` saves nothing.
+- `install.sh` one-line installer: latest release for macOS arm64 or Linux
+  x86_64, SHA-256 verified, with a fallback to `cargo install`.
+- A Homebrew formula template in `packaging/homebrew/`.
+- `--demo` fake data, `--init` starter config, an animated demo GIF.
 - CI (Ubuntu and macOS) and a release workflow for `aarch64-apple-darwin` and
   `x86_64-unknown-linux-gnu`.
 

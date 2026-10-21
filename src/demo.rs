@@ -274,6 +274,64 @@ pub fn provider_rows() -> Vec<(String, String, String, Health)> {
     ]
 }
 
+/// Demo health rows for what the user picked in `daypeek --demo setup`.
+pub fn provider_rows_for(a: &crate::setup::Answers) -> Vec<(String, String, String, Health)> {
+    let canned = provider_rows();
+    let mut rows = Vec::new();
+    for app in &a.apps {
+        let id = app.id();
+        let row = canned
+            .iter()
+            .find(|r| r.0 == id)
+            .cloned()
+            .map(|mut r| {
+                // Everything the user just set up looks healthy in the demo.
+                if !matches!(r.3, Health::Ok(_)) {
+                    r.3 = Health::Ok("3 tasks due".into());
+                }
+                r
+            })
+            .unwrap_or_else(|| {
+                let (name, kind) = crate::providers::REGISTRY
+                    .iter()
+                    .find(|r| r.0 == id)
+                    .map(|r| {
+                        let kind = match r.2 {
+                            crate::providers::Kind::Cloud => "cloud",
+                            crate::providers::Kind::Local => "local",
+                            crate::providers::Kind::Macos => "macos",
+                        };
+                        (r.1, kind)
+                    })
+                    .unwrap_or((id, "cloud"));
+                (
+                    id.into(),
+                    name.into(),
+                    kind.into(),
+                    Health::Ok("2 tasks due".into()),
+                )
+            });
+        rows.push(row);
+    }
+    for (name, _) in &a.calendars {
+        rows.push((
+            name.clone(),
+            "iCal calendar".into(),
+            "cloud".into(),
+            Health::Ok("7 events today".into()),
+        ));
+    }
+    if a.city.is_some() {
+        rows.push((
+            "weather".into(),
+            "Open-Meteo".into(),
+            "cloud".into(),
+            Health::Ok("68°F Partly cloudy".into()),
+        ));
+    }
+    rows
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -21,7 +21,7 @@ jobs:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: dtolnay/rust-toolchain@1.85.1
         with:
@@ -42,10 +42,13 @@ jobs:
           cp target/${{ matrix.target }}/release/daypeek dist/$STAGE/
           cp README.md LICENSE dist/$STAGE/
           tar -C dist -czf dist/$STAGE.tar.gz $STAGE
+          # "<hash>  <file name>" with no directory, so `shasum -c` works
+          # next to the download (install.sh only reads the hash).
+          cd dist
           if command -v shasum >/dev/null; then
-            shasum -a 256 dist/$STAGE.tar.gz | tee dist/$STAGE.sha256
+            shasum -a 256 $STAGE.tar.gz | tee $STAGE.sha256
           else
-            sha256sum dist/$STAGE.tar.gz | tee dist/$STAGE.sha256
+            sha256sum $STAGE.tar.gz | tee $STAGE.sha256
           fi
 
       - name: Attach to GitHub Release

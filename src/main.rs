@@ -64,6 +64,12 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Guided first-run setup: pick your apps, paste tokens, write the config
+    Setup {
+        /// Loopback port for browser sign-in (TickTick, Microsoft, Google)
+        #[arg(long, default_value_t = 8765)]
+        port: u16,
+    },
     /// List configured providers and check that each one works
     Providers {
         /// Machine-readable JSON
@@ -117,6 +123,9 @@ fn run(cli: Cli) -> Result<(), String> {
     if cli.init {
         return init(&path, cli.force);
     }
+    if let Some(Command::Setup { port }) = cli.command {
+        return setup_cmd(path, cli.demo, port);
+    }
 
     let now: DateTime<Utc> = match &cli.at {
         Some(s) => DateTime::parse_from_rfc3339(s)
@@ -141,7 +150,7 @@ fn run(cli: Cli) -> Result<(), String> {
         }
         Some(Command::Providers { json }) => return providers_cmd(&cfg, json),
         Some(Command::Auth { provider, port }) => return auth_cmd(&cfg, &provider, port),
-        None => {}
+        Some(Command::Setup { .. }) | None => {}
     }
 
     let snap = if cli.demo {
@@ -192,8 +201,42 @@ fn init(path: &std::path::Path, force: bool) -> Result<(), String> {
     }
     std::fs::write(path, config::SAMPLE_CONFIG).map_err(|e| format!("{}: {e}", path.display()))?;
     println!("Wrote {}", path.display());
-    println!("Next: set $TODOIST_API_TOKEN (or another provider's credentials), then run `daypeek providers`.");
+    println!(
+        "Next: run `daypeek setup` for guided setup, or edit the file and run `daypeek providers`."
+    );
     Ok(())
+}
+
+fn setup_cmd(path: PathBuf, demo: bool, port: u16) -> Result<(), String> {
+    use daypeek::wizard::{self, Options, Outcome};
+    let outcome = wizard::run(Options {
+        path: path.clone(),
+        demo,
+        port,
+    })?;
+    let rows = match outcome {
+        Outcome::Cancelled => return Ok(()),
+        Outcome::Demo(answers) => demo::provider_rows_for(&answers),
+        Outcome::Written => {
+            let cfg = Config::load(&path).map_err(|e| format!("config: {e}"))?;
+            println!("Checking every source…");
+            return providers_cmd(&cfg, false).map(|()| next_steps());
+        }
+    };
+    println!("Checking every source…");
+    print_providers(rows, false)?;
+    next_steps();
+    Ok(())
+}
+
+fn next_steps() {
+    println!(
+        "\n{}\n  {}            your day\n  {}   see what's still missing\n  {}\n",
+        "You're set. Next:".bold(),
+        "daypeek".cyan(),
+        "daypeek providers".cyan(),
+        "echo 'daypeek --compact' >> ~/.zshrc   # show it in every new terminal".dimmed()
+    );
 }
 
 fn providers_cmd(cfg: &Config, json: bool) -> Result<(), String> {
@@ -322,43 +365,8 @@ fn auth_cmd(cfg: &Config, id: &str, port: u16) -> Result<(), String> {
         .and_then(|v| v.as_str())
         .unwrap_or("common");
 
-    let flow = match kind {
-        "ticktick" => oauth::Flow {
-            provider: "TickTick",
-            authorize_url: "https://ticktick.com/oauth/authorize".into(),
-            token_url: "https://ticktick.com/oauth/token".into(),
-            scope: "tasks:read",
-            extra: &[],
-            basic_auth: true,
-            pkce: false,
-            redirect_host: "127.0.0.1",
-        },
-        "mstodo" => oauth::Flow {
-            provider: "Microsoft To Do",
-            authorize_url: providers::mstodo::authorize_url(tenant),
-            token_url: providers::mstodo::token_url(tenant),
-            scope: providers::mstodo::SCOPE,
-            extra: &[("response_mode", "query")],
-            basic_auth: false,
-            pkce: true,
-            redirect_host: "localhost",
-        },
-        "gtasks" => oauth::Flow {
-            provider: "Google Tasks",
-            authorize_url: providers::gtasks::AUTHORIZE_URL.into(),
-            token_url: providers::gtasks::TOKEN_URL.into(),
-            scope: providers::gtasks::SCOPE,
-            extra: &[("access_type", "offline"), ("prompt", "consent")],
-            basic_auth: false,
-            pkce: true,
-            redirect_host: "127.0.0.1",
-        },
-        other => {
-            return Err(format!(
-                "`daypeek auth` supports ticktick, mstodo, gtasks (not {other})"
-            ))
-        }
-    };
+    let flow = oauth::flow_for(kind, tenant)
+        .ok_or_else(|| format!("`daypeek auth` supports ticktick, mstodo, gtasks (not {kind})"))?;
     if matches!(kind, "ticktick" | "gtasks") && secret.is_none() {
         return Err(format!(
             "{kind} needs your app's client secret: {}",
@@ -369,23 +377,7 @@ fn auth_cmd(cfg: &Config, id: &str, port: u16) -> Result<(), String> {
     let tok = oauth::loopback(&http, &flow, &client_id, secret.as_deref(), port)
         .map_err(|e| e.to_string())?;
 
-    let (name, value, env) = match (kind, &tok.refresh_token) {
-        ("ticktick", _) => (
-            "token",
-            tok.access_token.clone(),
-            format!("{env_prefix}_ACCESS_TOKEN"),
-        ),
-        (_, None) => (
-            "access_token",
-            tok.access_token.clone(),
-            format!("{env_prefix}_ACCESS_TOKEN"),
-        ),
-        (_, Some(rt)) => (
-            "refresh_token",
-            rt.clone(),
-            format!("{env_prefix}_REFRESH_TOKEN"),
-        ),
-    };
+    let (name, value, env) = oauth::secret_to_store(kind, &tok);
     println!("\nSuccess. Store this {name} somewhere safe (it is not saved anywhere):\n");
     println!("  {value}\n");
     println!("Either export it from your shell profile:\n  export {env}='…'\n");

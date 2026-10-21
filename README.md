@@ -2,178 +2,260 @@
 
 # daypeek
 
-**Your whole day in one glance, right in the terminal.**<br>
-Calendar, tasks from 10 apps, and the weather. Printed in milliseconds, then it gets out of your way.
+**Your whole day at a glance, right in your terminal.**<br>
+Calendar, tasks from 10 apps, and weather in one read-only command that prints in milliseconds.
 
 [![CI](https://github.com/Jherin89/daypeek/actions/workflows/ci.yml/badge.svg)](https://github.com/Jherin89/daypeek/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Rust 1.85+](https://img.shields.io/badge/rust-1.85%2B-orange.svg?logo=rust)](https://www.rust-lang.org)
-[![Platform: macOS | Linux](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey.svg)](#install)
+[![Platform: macOS | Linux](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey.svg)](#get-started-in-60-seconds)
 
-<img src="docs/screenshot.png" alt="daypeek showing today's calendar, merged tasks from five apps, weather, and a daily-note excerpt" width="760">
-
-<sub>Every screenshot here is <code>daypeek --demo</code>: fake data, no accounts.</sub>
+<img src="docs/demo.gif" alt="Typing daypeek --demo --compact, then daypeek --demo: today's calendar, merged tasks, weather, and a daily note" width="760">
 
 </div>
 
-## Why
+## Get started in 60 seconds
 
-Your day is spread across a calendar, a to-do app or three, a notes vault,
-and a weather tab. Opening each of them every morning adds up. `daypeek` is
-one command that reads them all, **read-only**, and prints a single screen:
-what's on the calendar, what's due or overdue, and whether to grab a jacket.
-Put it in your shell startup and you see your day every time you open a
-terminal.
+**1. Install** (macOS Apple Silicon or Linux x86_64)
 
-## Features
+```sh
+curl -fsSL https://raw.githubusercontent.com/Jherin89/daypeek/main/install.sh | sh
+```
 
-- **One screen, one command.** Calendar, tasks, weather, and today's daily note.
-  `--compact` gives you three lines for shell startup; `--json` is there for scripts.
-- **Tasks from 10 apps, merged.** Todoist, TickTick, Microsoft To Do, Google
-  Tasks, Things 3, Apple Reminders, Notion, Obsidian, todo.txt, and Markdown.
-  Duplicates are folded together, priorities are normalized to p1–p4, and every
-  task gets a badge showing where it came from.
-- **Any calendar with an iCal link.** Google, iCloud, Outlook, Fastmail, sports
-  schedules, and so on. Recurring events, all-day events, and time zones are
-  handled.
-- **Fast and offline-friendly.** Sources are fetched in parallel. Each one is
-  cached, so when the network is down you see the last good data marked
-  `↻ cached 3h ago` instead of an error.
-- **Private by design.** Read-only. No account, server, or telemetry. Tokens
-  come from env vars or the macOS Keychain and are only sent to that app's own API.
-- **Never crashes your shell.** A broken source shows up as one dim line, and
-  the rest of the dashboard still prints.
-- **Small and dependency-light.** A single static binary, no async runtime, and
-  no client secrets baked in.
+<sub>Other platforms, or before the first release is out: <code>cargo install --git https://github.com/Jherin89/daypeek</code> (needs <a href="https://rustup.rs">Rust</a>). The script tells you if this applies.</sub>
 
-## Gallery
+**2. Try it with fake data** (no accounts needed)
+
+```sh
+daypeek --demo
+```
+
+**3. Connect your apps.** A wizard walks you through it, and tokens go to your Keychain.
+
+```sh
+daypeek setup
+```
+
+**Add to your terminal startup** so you see your day in every new tab:
+
+```sh
+echo 'daypeek --compact' >> ~/.zshrc      # bash: ~/.bashrc · fish: see docs/SETUP.md
+```
+
+## What you get
+
+- 📅 **Today's calendar** from any iCal link (Google, iCloud, Outlook…), with recurring and all-day events
+- ✅ **Tasks from 10 apps, merged**, with duplicates folded together, p1–p4 priorities, and a badge showing where each task came from
+- ⛅ **Weather** from Open-Meteo, no API key needed
+- ⚡ **Instant and offline-friendly.** Every source is cached, and stale data is clearly marked.
+- 🔒 **Private.** Read-only, no telemetry, and tokens only go to each app's own API.
+
+## Screenshots
 
 | | |
 | :---: | :---: |
-| <img src="docs/screenshot-compact.png" alt="daypeek --compact: a three-line summary" width="420"><br>`--compact` for your shell startup | <img src="docs/screenshot-providers.png" alt="daypeek providers: a health check per source" width="420"><br>`daypeek providers` health check |
-| <img src="docs/screenshot-json.png" alt="daypeek --json piped to jq" width="420"><br>`--json` for scripts, status bars, and `jq` | <img src="docs/screenshot-offline.png" alt="offline: every cloud source shows its cached data, marked stale" width="420"><br>Offline: cached data, clearly marked |
-| <img src="docs/screenshot-light.png" alt="daypeek in a light terminal theme" width="420"><br>Light terminal theme | <img src="docs/screenshot.png" alt="daypeek in a dark terminal theme" width="420"><br>Dark terminal theme |
+| <img src="docs/screenshot-setup.png" alt="The daypeek setup wizard: pick apps, paste a hidden token, add a calendar and a city, then a health check" width="420"><br>**`daypeek setup`**: guided setup in four steps | <img src="docs/screenshot-compact.png" alt="daypeek --compact: a three-line summary" width="420"><br>**`--compact`**: three lines for your shell startup |
+| <img src="docs/screenshot-providers.png" alt="daypeek providers: a health check per source" width="420"><br>**`daypeek providers`**: is everything connected? | <img src="docs/screenshot-json.png" alt="daypeek --json piped to jq" width="420"><br>**`--json`**: for scripts, status bars, and `jq` |
+| <img src="docs/screenshot-offline.png" alt="Offline: every cloud source shows its cached data, marked stale" width="420"><br>**Offline**: last good data, clearly marked | <img src="docs/screenshot-light.png" alt="daypeek in a light terminal theme" width="420"><br>**Light themes** look good too |
 
-## Quick start
-
-```sh
-# 1. Install (needs Rust 1.85+, or grab a macOS binary from Releases; see docs/SETUP.md)
-cargo install --git https://github.com/Jherin89/daypeek
-
-# 2. See it with fake data, no setup needed
-daypeek --demo
-
-# 3. Write a commented starter config to ~/.config/daypeek/config.toml
-daypeek --init
-
-# 4. Add a token for the app you use (Todoist shown here), then check every source
-export DAYPEEK_TODOIST_TOKEN='…'       # or keep it in the macOS Keychain
-daypeek providers
-
-# 5. Your day
-daypeek
-```
-
-Then [run it every time a terminal opens](docs/SETUP.md#5-run-it-when-a-terminal-opens):
-
-```sh
-echo 'command -v daypeek >/dev/null && daypeek --compact' >> ~/.zshrc
-```
-
-**Docs:** 📦 [Setup guide](docs/SETUP.md) (install, every provider, calendars, weather, shell startup) ·
-📖 [Usage reference](docs/USAGE.md) (flags, subcommands, JSON, troubleshooting, privacy) ·
-🧩 [Add a provider](CONTRIBUTING.md) · 📝 [Changelog](CHANGELOG.md)
-
-## Install
-
-| How | Command |
-| --- | --- |
-| Prebuilt macOS (Apple Silicon) or Linux x86_64 binary | Download from [Releases](https://github.com/Jherin89/daypeek/releases) ([steps](docs/SETUP.md#1-install)) |
-| From GitHub with Cargo | `cargo install --git https://github.com/Jherin89/daypeek` |
-| From a clone | `git clone https://github.com/Jherin89/daypeek && cd daypeek && cargo install --path .` |
-| From crates.io (once it's published) | `cargo install daypeek` |
+<sub>Every screenshot uses <code>daypeek --demo</code> fake data.</sub>
 
 ## Supported apps
 
-| App | Status | How it connects | Setup |
-| --- | --- | --- | --- |
-| **Todoist** | ✅ v1 | Official REST API, your personal API token | [guide](docs/SETUP.md#todoist) |
-| **TickTick** | ✅ v1 | Official Open API, your own registered app | [guide](docs/SETUP.md#ticktick) |
-| **Microsoft To Do** | ✅ v1 | Microsoft Graph, your own Entra app (no secret) | [guide](docs/SETUP.md#microsoft-to-do) |
-| **Google Tasks** | ✅ v1 | Google Tasks API, your own OAuth client | [guide](docs/SETUP.md#google-tasks) |
-| **Things 3** | ✅ v1 · macOS | Reads Things' local database **read-only** | [guide](docs/SETUP.md#things-3) |
-| **Apple Reminders** | ✅ v1 · macOS | Small bundled `osascript` (JXA) bridge | [guide](docs/SETUP.md#apple-reminders) |
-| **Notion** | ✅ v1 | Database query through an internal connection | [guide](docs/SETUP.md#notion) |
-| **Obsidian** | ✅ v1 | Vault scan (Tasks and Dataview syntax) plus the daily note | [guide](docs/SETUP.md#obsidian) |
-| **todo.txt** | ✅ v1 | Local file with `due:` dates | [guide](docs/SETUP.md#todotxt) |
-| **Markdown** | ✅ v1 | Any `.md` files with `- [ ]` checkboxes | [guide](docs/SETUP.md#markdown) |
-| **Calendars (iCal)** | ✅ v1 | Any `.ics` / `webcal://` link or local file | [guide](docs/SETUP.md#calendars) |
-| **Weather** | ✅ v1 | [Open-Meteo](https://open-meteo.com), no API key | [guide](docs/SETUP.md#weather) |
-| Asana | 🗺 planned | | |
-| Trello | 🗺 planned | | |
-| Linear | 🗺 planned | | |
-| ClickUp | 🗺 planned | | |
-| Logseq | 🗺 planned | | |
-| Bear | 🗺 planned | | |
+`daypeek setup` handles all of these. Click an app for the manual setup.
 
-Want another app? [Request it](https://github.com/Jherin89/daypeek/issues/new?template=new_provider.yml)
-or [add it yourself](CONTRIBUTING.md): a provider is a single file.
+<details>
+<summary><b>Todoist</b>: paste your API token</summary>
 
-## Privacy
+Todoist → **Settings → Integrations → Developer → Copy API token**, then:
 
-- **Read-only.** `daypeek` never creates, edits, completes, or deletes anything.
-- **Your tokens stay yours.** They're read from env vars, the macOS Keychain, or
-  (if you insist) your config file. Each one is only sent to its own app's API
-  over HTTPS. They're never logged, cached, or sent anywhere else.
-- **No telemetry, no server.** The only other network calls are your iCal URLs
-  and Open-Meteo (your city or coordinates).
-- **Local cache** of the last good data lives in `~/.cache/daypeek/`, one file
-  per source, readable only by you (`0600`). Delete it any time.
+```sh
+security add-generic-password -s daypeek-todoist -a "$USER" -w   # macOS Keychain (prompts)
+export DAYPEEK_TODOIST_TOKEN='…'                                  # or an env var (Linux)
+```
 
-## How it works
+```toml
+[providers.todoist]
+filter = "today | overdue"
+```
+
+[Full Todoist guide →](docs/SETUP.md#todoist)
+
+</details>
+
+<details>
+<summary><b>TickTick</b>: your own free developer app, then sign in once</summary>
+
+Register an app at [developer.ticktick.com/manage](https://developer.ticktick.com/manage) with the redirect URL `http://127.0.0.1:8765/callback`, then:
+
+```toml
+[providers.ticktick]
+client_id = "your-client-id"
+```
+
+```sh
+TICKTICK_CLIENT_SECRET='…' daypeek auth ticktick   # prints the token to store
+```
+
+[Full TickTick guide →](docs/SETUP.md#ticktick)
+
+</details>
+
+<details>
+<summary><b>Microsoft To Do</b>: your own Entra app (no secret), then sign in once</summary>
+
+Register an app at [entra.microsoft.com](https://entra.microsoft.com): platform *Mobile and desktop*, redirect `http://localhost/callback`, and Graph permission `Tasks.Read`. Then:
+
+```toml
+[providers.mstodo]
+client_id = "00000000-0000-0000-0000-000000000000"
+```
+
+```sh
+daypeek auth mstodo     # prints a refresh token for $MSTODO_REFRESH_TOKEN / Keychain
+```
+
+[Full Microsoft To Do guide →](docs/SETUP.md#microsoft-to-do)
+
+</details>
+
+<details>
+<summary><b>Google Tasks</b>: your own Google Cloud OAuth client, then sign in once</summary>
+
+Enable the Tasks API and create a **Desktop app** OAuth client in [Google Cloud](https://console.cloud.google.com). Then:
+
+```toml
+[providers.gtasks]
+client_id = "….apps.googleusercontent.com"
+```
+
+```sh
+export GTASKS_CLIENT_SECRET='…'
+daypeek auth gtasks     # prints a refresh token for $GTASKS_REFRESH_TOKEN / Keychain
+```
+
+[Full Google Tasks guide →](docs/SETUP.md#google-tasks), including the 7-day token limit for apps in *Testing* status
+
+</details>
+
+<details>
+<summary><b>Notion</b>: an internal connection token and a database</summary>
+
+Create an internal connection in Notion's developer portal, add it to your database (**••• → Connections**), then:
+
+```sh
+export NOTION_TOKEN='…'     # or Keychain: daypeek-notion
+```
+
+```toml
+[providers.notion]
+database_id = "the 32 characters in the database URL"
+title_property = "Name"
+date_property  = "Due"
+done_property  = "Done"
+```
+
+[Full Notion guide →](docs/SETUP.md#notion)
+
+</details>
+
+<details>
+<summary><b>Things 3</b> (macOS): nothing to set up</summary>
+
+```toml
+[providers.things]
+```
+
+daypeek reads Things' local database read-only. [Details →](docs/SETUP.md#things-3)
+
+</details>
+
+<details>
+<summary><b>Apple Reminders</b> (macOS): allow access once</summary>
+
+```toml
+[providers.reminders]
+```
+
+The first run asks to let your terminal control Reminders. Click **Allow**. [Details →](docs/SETUP.md#apple-reminders)
+
+</details>
+
+<details>
+<summary><b>Obsidian</b>, <b>todo.txt</b>, <b>Markdown</b>: just a path</summary>
+
+```toml
+[providers.obsidian]
+vault = "~/Documents/Obsidian/Main"
+daily_notes_folder = "Daily"        # shows today's note too
+
+[providers.todotxt]
+path = "~/todo.txt"
+
+[providers.markdown]
+paths = ["~/notes/tasks.md"]
+```
+
+Understands Obsidian Tasks `📅 2026-10-21`, Dataview `[due:: …]`, and todo.txt `due:`. [Details →](docs/SETUP.md#obsidian)
+
+</details>
+
+<details>
+<summary><b>Calendars</b> (Google, iCloud, Outlook, any .ics) and <b>weather</b></summary>
+
+```toml
+[[calendars]]
+name = "Personal"
+url  = "https://calendar.google.com/calendar/ical/…/basic.ics"   # "Secret address in iCal format"
+
+[weather]
+city  = "Evans, Georgia"
+units = "imperial"
+```
+
+Where to find each calendar's link: [Calendars guide →](docs/SETUP.md#calendars)
+
+</details>
+
+| App | Status | | App | Status |
+| --- | --- | --- | --- | --- |
+| Todoist | ✅ v1 | | Things 3 (macOS) | ✅ v1 |
+| TickTick | ✅ v1 | | Apple Reminders (macOS) | ✅ v1 |
+| Microsoft To Do | ✅ v1 | | Obsidian | ✅ v1 |
+| Google Tasks | ✅ v1 | | todo.txt | ✅ v1 |
+| Notion | ✅ v1 | | Markdown | ✅ v1 |
+| Asana, Trello, Linear | 🗺 planned | | ClickUp, Logseq, Bear | 🗺 planned |
+
+Missing one? [Request it](https://github.com/Jherin89/daypeek/issues/new?template=new_provider.yml), or [add it](CONTRIBUTING.md): each provider is a single file.
+
+## Learn more
+
+| | |
+| --- | --- |
+| 📦 [**Setup guide**](docs/SETUP.md) | Every install option, the wizard, every app step by step, shell startup for zsh, bash, and fish |
+| 📖 [**Usage reference**](docs/USAGE.md) | All flags and subcommands, JSON and `jq` recipes, troubleshooting and FAQ |
+| 🔒 [**Privacy**](docs/USAGE.md#privacy) | Read-only; tokens only go to each app's API; the cache lives in `~/.cache/daypeek/` |
+| 🧩 [**Contributing**](CONTRIBUTING.md) | How to add a provider in one file |
+| 📝 [**Changelog**](CHANGELOG.md) | What's new |
+
+<details>
+<summary><b>How it works</b></summary>
 
 ```
 config.toml ─┬─ calendars ─► fetch .ics ─► parse VEVENTs ─► expand RRULE for today ─┐
-             ├─ providers ─► Provider::fetch() (one thread each) ─► merge + dedup ───┼─► Snapshot ─► full / compact / JSON
+             ├─ providers ─► Provider::fetch() (one thread each) ─► merge + dedup ───┼─► full / compact / JSON
              └─ weather ───► geocode (cached) ─► Open-Meteo forecast ────────────────┘
                        every source goes through the cache: live ▸ stale ▸ failed
 ```
 
-- Each source runs on its own thread (`std::thread::scope`) with blocking HTTP
-  and a hard timeout. There's no async runtime.
-- Providers implement one small trait and live one per file in
-  [`src/providers/`](src/providers).
-- iCal is parsed by a small, forgiving reader. Recurrence (`RRULE`, `EXDATE`,
-  overrides) is worked out for the current day only, rather than expanding the
-  whole series.
-- On a Linux x86_64 test machine with two calendars, five providers, and
-  weather configured, a run takes about **0.1–0.5 s** live, **5 ms** with
-  `--offline`, and **3 ms** with `--demo`.
-
-## Development
+Every source is fetched in parallel with plain threads and a hard timeout. There's no async runtime. A run takes about 0.1–0.5 s live, 5 ms with `--offline`, and 3 ms with `--demo`. Cloud providers are tested against recorded fixtures, and CI runs on Ubuntu and on macOS (Apple Silicon).
 
 ```sh
-cargo test                                   # unit, fixture, and CLI tests
-cargo clippy --all-targets -- -D warnings
-cargo run -- --demo
-python3 scripts/screenshot.py                # re-render docs/*.png from --demo (needs Chrome + jq)
-vhs docs/demo.tape                           # optional animated GIF (brew install vhs)
+cargo test && cargo run -- --demo
+python3 scripts/screenshot.py && vhs docs/demo.tape && vhs docs/setup.tape   # re-render the images
 ```
 
-Cloud providers are tested against recorded, anonymized JSON fixtures in
-[`tests/fixtures/`](tests/fixtures). Things is tested against a generated SQLite
-database, and Reminders against sample bridge output. CI runs fmt, clippy, and
-tests on Ubuntu and on macOS (Apple Silicon). A `v*` tag builds release
-binaries for `aarch64-apple-darwin` and `x86_64-unknown-linux-gnu`.
-
-## Roadmap
-
-- [ ] Asana, Trello, Linear, and ClickUp providers
-- [ ] Logseq journals and Bear notes
-- [ ] CalDAV (iCloud, Fastmail) without a public `.ics` link
-- [ ] `daypeek week`: the next 7 days
-- [ ] Homebrew tap
-- [ ] Optional live mode that refreshes on a timer
+</details>
 
 ## License
 

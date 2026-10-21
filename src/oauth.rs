@@ -218,3 +218,64 @@ fn open_browser(url: &str) {
         .stderr(std::process::Stdio::null())
         .spawn();
 }
+
+/// The OAuth flow for a provider kind (`ticktick`, `mstodo`, `gtasks`).
+pub fn flow_for(kind: &str, tenant: &str) -> Option<Flow> {
+    let flow = match kind {
+        "ticktick" => Flow {
+            provider: "TickTick",
+            authorize_url: "https://ticktick.com/oauth/authorize".into(),
+            token_url: "https://ticktick.com/oauth/token".into(),
+            scope: "tasks:read",
+            extra: &[],
+            basic_auth: true,
+            pkce: false,
+            redirect_host: "127.0.0.1",
+        },
+        "mstodo" => Flow {
+            provider: "Microsoft To Do",
+            authorize_url: crate::providers::mstodo::authorize_url(tenant),
+            token_url: crate::providers::mstodo::token_url(tenant),
+            scope: crate::providers::mstodo::SCOPE,
+            extra: &[("response_mode", "query")],
+            basic_auth: false,
+            pkce: true,
+            redirect_host: "localhost",
+        },
+        "gtasks" => Flow {
+            provider: "Google Tasks",
+            authorize_url: crate::providers::gtasks::AUTHORIZE_URL.into(),
+            token_url: crate::providers::gtasks::TOKEN_URL.into(),
+            scope: crate::providers::gtasks::SCOPE,
+            extra: &[("access_type", "offline"), ("prompt", "consent")],
+            basic_auth: false,
+            pkce: true,
+            redirect_host: "127.0.0.1",
+        },
+        _ => return None,
+    };
+    Some(flow)
+}
+
+/// Which credential to keep after a successful sign-in:
+/// `(secret name, value, env var)`. TickTick has no refresh tokens, so its
+/// long-lived access token is the thing to store.
+pub fn secret_to_store(kind: &str, tok: &TokenResponse) -> (&'static str, String, String) {
+    let env_prefix = kind.to_uppercase();
+    match (kind, &tok.refresh_token) {
+        ("ticktick", _) | (_, None) => (
+            if kind == "ticktick" {
+                "token"
+            } else {
+                "access_token"
+            },
+            tok.access_token.clone(),
+            format!("{env_prefix}_ACCESS_TOKEN"),
+        ),
+        (_, Some(rt)) => (
+            "refresh_token",
+            rt.clone(),
+            format!("{env_prefix}_REFRESH_TOKEN"),
+        ),
+    }
+}
