@@ -35,6 +35,42 @@ jobs:
       - name: demo smoke test
         run: cargo run --release -- --demo --compact
 
+  release-targets:
+    # The release workflow only runs on tags; build its extra targets on every
+    # push so a broken cross build shows up before release day.
+    name: build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+          - target: x86_64-apple-darwin
+            os: macos-14
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@1.85.1
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      - name: musl toolchain
+        if: contains(matrix.target, 'musl')
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: build
+        run: cargo build --release --locked --target ${{ matrix.target }}
+      - name: inspect
+        shell: bash
+        run: |
+          BIN=target/${{ matrix.target }}/release/daypeek
+          file "$BIN"
+          if [[ "${{ matrix.target }}" == *musl ]]; then
+            file "$BIN" | grep -Eq 'static(-pie)? linked'
+            "$BIN" --demo --compact --color never
+          fi
+
   install-script:
     name: install.sh (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -47,5 +83,17 @@ jobs:
       - name: shellcheck
         if: runner.os == 'Linux'
         run: shellcheck -s sh install.sh
-      - name: dry run (no release yet → falls back to the cargo hint)
+      - name: dry run against the latest release
         run: sh install.sh --dry-run
+      - name: DAYPEEK_INSTALL_DIR and PATH advice
+        shell: bash
+        run: |
+          out=$(DAYPEEK_INSTALL_DIR="$RUNNER_TEMP/dp-bin" sh install.sh --dry-run 2>&1)
+          echo "$out"
+          grep -q "into $RUNNER_TEMP/dp-bin/daypeek" <<<"$out"
+          grep -q 'export PATH=' <<<"$out"
+      - name: real install into a temp dir
+        shell: bash
+        run: |
+          DAYPEEK_INSTALL_DIR="$RUNNER_TEMP/dp-bin" sh install.sh
+          "$RUNNER_TEMP/dp-bin/daypeek" --version

@@ -16,9 +16,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - target: aarch64-apple-darwin
+          - target: aarch64-apple-darwin # Apple Silicon
             os: macos-14
-          - target: x86_64-unknown-linux-gnu
+          - target: x86_64-apple-darwin # Intel Macs (cross-built on Apple Silicon)
+            os: macos-14
+          # Static musl binary: runs on any x86_64 Linux, whatever its glibc.
+          - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -31,8 +34,23 @@ jobs:
         with:
           key: ${{ matrix.target }}
 
+      - name: musl toolchain
+        if: contains(matrix.target, 'musl')
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
       - name: Build
         run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Check the binary runs (and is static on Linux)
+        if: matrix.target != 'x86_64-apple-darwin' || runner.arch == 'X64'
+        shell: bash
+        run: |
+          BIN=target/${{ matrix.target }}/release/daypeek
+          file "$BIN"
+          "$BIN" --demo --compact --color never
+          if [[ "${{ matrix.target }}" == *musl ]]; then
+            file "$BIN" | grep -Eq 'static(-pie)? linked'
+          fi
 
       - name: Package
         shell: bash
@@ -52,7 +70,7 @@ jobs:
           fi
 
       - name: Attach to GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
           files: |

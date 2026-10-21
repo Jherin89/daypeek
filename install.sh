@@ -5,18 +5,20 @@
 #   curl -fsSL https://raw.githubusercontent.com/Jherin89/daypeek/main/install.sh | sh
 #
 # Options (after `sh -s --` when piping):
-#   --dir DIR     install into DIR (default: ~/.local/bin, or /usr/local/bin if
-#                 ~/.local/bin isn't on PATH and /usr/local/bin is writable)
+#   --dir DIR     install into DIR (or set DAYPEEK_INSTALL_DIR=DIR). Default:
+#                 the first of ~/.local/bin, ~/bin, /usr/local/bin that is on
+#                 your PATH (and writable), else ~/.local/bin plus the exact
+#                 line to add it to your PATH
 #   --version V   install tag V (e.g. v0.1.0) instead of the latest release
 #   --dry-run     show what would happen, change nothing
 #
-# Supported: macOS on Apple Silicon (arm64), Linux on x86_64. Anything else
-# gets the `cargo install` command instead.
+# Prebuilt binaries: macOS (Apple Silicon and Intel) and x86_64 Linux. Anything
+# else gets the `cargo install` command instead.
 set -eu
 
 REPO="Jherin89/daypeek"
 BIN="daypeek"
-DIR=""
+DIR="${DAYPEEK_INSTALL_DIR:-}"
 VERSION="latest"
 DRY_RUN=0
 
@@ -43,7 +45,7 @@ while [ $# -gt 0 ]; do
     --dir) [ $# -ge 2 ] || die "--dir needs a value"; DIR="$2"; shift 2 ;;
     --version) [ $# -ge 2 ] || die "--version needs a value"; VERSION="$2"; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
-    -h|--help) sed -n '2,15p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,16p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) die "unknown option: $1" ;;
   esac
 done
@@ -51,12 +53,15 @@ done
 # ── Which binary? ────────────────────────────────────────────────────────
 os=$(uname -s)
 arch=$(uname -m)
+# A Terminal running under Rosetta reports x86_64 on Apple Silicon.
+if [ "$os/$arch" = "Darwin/x86_64" ] && [ "$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)" = "1" ]; then
+  arch=arm64
+fi
 case "$os/$arch" in
-  Darwin/arm64) target="aarch64-apple-darwin" ;;
-  Linux/x86_64|Linux/amd64) target="x86_64-unknown-linux-gnu" ;;
-  Darwin/x86_64)
-    warn "there's no prebuilt binary for Intel Macs yet."
-    cargo_hint; exit 1 ;;
+  Darwin/arm64|Darwin/aarch64) targets="aarch64-apple-darwin" ;;
+  Darwin/x86_64) targets="x86_64-apple-darwin" ;;
+  # Static musl build first (any glibc); older releases only have the gnu one.
+  Linux/x86_64|Linux/amd64) targets="x86_64-unknown-linux-musl x86_64-unknown-linux-gnu" ;;
   *)
     warn "there's no prebuilt binary for $os/$arch yet."
     cargo_hint; exit 1 ;;
@@ -81,13 +86,15 @@ fi
 # ── Where to put it? ─────────────────────────────────────────────────────
 on_path() { case ":$PATH:" in *":$1:"*) return 0 ;; *) return 1 ;; esac; }
 if [ -z "$DIR" ]; then
-  DIR="$HOME/.local/bin"
-  if ! on_path "$DIR" && on_path /usr/local/bin && [ -w /usr/local/bin ]; then
-    DIR="/usr/local/bin"
-  fi
+  for d in "$HOME/.local/bin" "$HOME/bin" /usr/local/bin; do
+    if on_path "$d" && { [ -w "$d" ] || { [ ! -e "$d" ] && [ "$d" != /usr/local/bin ]; }; }; then
+      DIR="$d"; break
+    fi
+  done
+  [ -n "$DIR" ] || DIR="$HOME/.local/bin"
 fi
+case "$DIR" in \~/*) DIR="$HOME/${DIR#\~/}" ;; esac
 
-asset="$BIN-$target.tar.gz"
 if [ -n "${DAYPEEK_INSTALL_BASE:-}" ]; then
   base="$DAYPEEK_INSTALL_BASE"   # testing: a local mirror of the release assets
 elif [ "$VERSION" = "latest" ]; then
@@ -96,20 +103,32 @@ else
   base="https://github.com/$REPO/releases/download/$VERSION"
 fi
 
-info "daypeek for $target ($VERSION release)"
-say "    from $base/$asset"
-say "    into $DIR/$BIN"
-
 tmp=$(mktemp -d 2>/dev/null || mktemp -d -t daypeek)
 trap 'rm -rf "$tmp"' EXIT INT TERM
 
-if ! fetch "$base/$asset" "$tmp/$asset" 2>/dev/null; then
-  warn "couldn't download $asset. There may be no published release yet."
+target=""
+for t in $targets; do
+  if fetch "$base/$BIN-$t.tar.gz" "$tmp/$BIN-$t.tar.gz" 2>/dev/null; then
+    target="$t"; break
+  fi
+done
+asset="$BIN-$target.tar.gz"
+
+if [ -z "$target" ]; then
+  first=${targets%% *}
+  warn "couldn't download $BIN-$first.tar.gz from the $VERSION release."
+  if [ "$first" = "x86_64-apple-darwin" ]; then
+    say "    Intel Mac builds start with the release after v0.1.0. Until then,"
+    say "    Homebrew builds it for you:  brew install jherin89/tap/daypeek"
+  fi
   say "    Releases: https://github.com/$REPO/releases"
   cargo_hint
   [ "$DRY_RUN" -eq 1 ] && exit 0
   exit 1
 fi
+info "daypeek for $target ($VERSION release)"
+say "    from $base/$asset"
+say "    into $DIR/$BIN"
 fetch "$base/$BIN-$target.sha256" "$tmp/sum" || die "couldn't download the checksum file"
 
 expected=$(cut -d ' ' -f 1 < "$tmp/sum")
@@ -122,8 +141,30 @@ info "checksum OK ($actual)"
 tar -xzf "$tmp/$asset" -C "$tmp"
 [ -f "$tmp/$BIN-$target/$BIN" ] || die "archive didn't contain $BIN"
 
+# Exact PATH advice, printed after a real install and in dry runs.
+path_advice() {
+  on_path "$DIR" && return 0
+  case "${SHELL:-}" in
+    */zsh) rc="$HOME/.zshrc" ;;
+    */bash) if [ "$os" = "Darwin" ]; then rc="$HOME/.bash_profile"; else rc="$HOME/.bashrc"; fi ;;
+    */fish) rc="" ;;
+    *) rc="$HOME/.profile" ;;
+  esac
+  warn "$DIR is not on your PATH, so typing \`daypeek\` won't find it yet."
+  say "    Fix it by pasting this one line (then open a new terminal):"
+  if [ -z "$rc" ]; then
+    say "    fish_add_path $DIR"
+  else
+    # shellcheck disable=SC2016 # $PATH is meant to stay literal in the rc file
+    say "    echo 'export PATH=\"$DIR:\$PATH\"' >> $rc && . $rc"
+  fi
+}
+run_hint="$BIN"
+on_path "$DIR" || run_hint="$DIR/$BIN"
+
 if [ "$DRY_RUN" -eq 1 ]; then
   info "dry run: would install $DIR/$BIN"
+  path_advice
   exit 0
 fi
 
@@ -139,25 +180,22 @@ if [ "$os" = "Darwin" ] && command -v xattr >/dev/null 2>&1; then
   xattr -d com.apple.quarantine "$DIR/$BIN" 2>/dev/null || true
 fi
 
-info "installed $("$DIR/$BIN" --version 2>/dev/null || echo "$BIN") to $DIR/$BIN"
-if ! on_path "$DIR"; then
-  shell_rc="$HOME/.profile"
-  case "${SHELL:-}" in
-    */zsh) shell_rc="$HOME/.zshrc" ;;
-    */bash) shell_rc="$HOME/.bashrc" ;;
-    */fish) shell_rc="$HOME/.config/fish/config.fish" ;;
-  esac
-  info "$DIR is not on your PATH yet. Add this line to $shell_rc:"
-  case "${SHELL:-}" in
-    */fish) say "    fish_add_path $DIR" ;;
-    *) say "    export PATH=\"$DIR:\$PATH\"" ;;
-  esac
+if ! version=$("$DIR/$BIN" --version 2>/dev/null); then
+  warn "$DIR/$BIN was installed but won't start on this system."
+  if [ "$target" = "x86_64-unknown-linux-gnu" ]; then
+    say "    This older release needs glibc 2.39+ (Ubuntu 24.04 or newer). Newer"
+    say "    releases ship a static build that runs anywhere; or build from source:"
+  fi
+  cargo_hint
+  exit 1
 fi
+info "installed $version to $DIR/$BIN"
+path_advice
 
 say ""
 say "Next steps:"
-say "  daypeek --demo     # see it with fake data"
-say "  daypeek setup      # pick your apps, paste tokens, done"
-say "  daypeek            # your day"
+say "  $run_hint --demo     # see it with fake data"
+say "  $run_hint setup      # pick your apps, paste tokens, done"
+say "  $run_hint            # your day"
 say ""
 say "Docs: https://github.com/$REPO#readme"
