@@ -1,0 +1,35 @@
+{
+  "kind": "tasks#tasks",
+  "etag": "\"LTEyMzQ1Njc4OQ\"",
+  "items": [
+    {
+      "kind": "tasks#task",
+      "id": "MTIzNDU2Nzg5MA",
+      "title": "Pick up dry cleaning",
+      "updated": "2026-10-20T13:01:22.000Z",
+      "status": "needsAction",
+      "due": "2026-10-21T00:00:00.000Z"
+    },
+    {
+      "kind": "tasks#task",
+      "id": "MTIzNDU2Nzg5MQ",
+      "title": "Return library books",
+      "status": "needsAction",
+      "due": "2026-10-17T00:00:00.000Z"
+    },
+    {
+      "kind": "tasks#task",
+      "id": "MTIzNDU2Nzg5Mg",
+      "title": "Finished",
+      "status": "completed",
+      "due": "2026-10-20T00:00:00.000Z",
+      "completed": "2026-10-20T15:00:00.000Z"
+    },
+    {
+      "kind": "tasks#task",
+      "id": "MTIzNDU2Nzg5Mw",
+      "title": "No date",
+      "status": "needsAction"
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+- [ ] Update resume 📅 2026-10-15
+- [ ] Email Sam the slides [due:: 2026-10-21]

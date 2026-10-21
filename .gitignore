@@ -1,0 +1,11 @@
+/target
+**/*.rs.bk
+.DS_Store
+*.profraw
+/tmp
+# never commit real configs or tokens
+config.toml
+!tests/fixtures/**/config.toml
+.env
+*.token
+docs/*.html

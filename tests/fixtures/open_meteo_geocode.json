@@ -1,0 +1,8 @@
+{
+  "results": [
+    { "id": 5419396, "name": "Evans", "latitude": 40.37637, "longitude": -104.69220, "country_code": "US", "admin1": "Colorado", "country": "United States", "population": 21000 },
+    { "id": 4192375, "name": "Evans", "latitude": 33.53375, "longitude": -82.13067, "country_code": "US", "admin1": "Georgia", "country": "United States", "population": 29000 },
+    { "id": 5115835, "name": "Evans", "latitude": 42.65, "longitude": -79.0, "country_code": "US", "admin1": "New York", "country": "United States" }
+  ],
+  "generationtime_ms": 0.7
+}

@@ -1,0 +1,5 @@
+[
+  { "title": "Take out recycling", "list": "Home", "due": "2026-10-21", "priority": 1 },
+  { "title": "Refill prescription", "list": "Health", "due": "2026-10-20", "priority": 5 },
+  { "title": "Email landlord", "list": "Reminders", "due": "2026-10-14", "priority": 0 }
+]

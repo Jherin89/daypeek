@@ -1,0 +1,46 @@
+[package]
+name = "today"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+resolver = "3"
+authors = ["Jordan Herin"]
+license = "MIT"
+description = "A fast one-screen daily dashboard for your terminal: calendar, tasks from every app, and weather"
+readme = "README.md"
+repository = "https://github.com/Jherin89/today"
+homepage = "https://github.com/Jherin89/today"
+keywords = ["cli", "dashboard", "calendar", "todo", "productivity"]
+categories = ["command-line-utilities"]
+exclude = ["target", "docs/*.gif"]
+
+[dependencies]
+base64 = "0.22"
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
+chrono-tz = "0.10"
+clap = { version = "4.5", features = ["derive"] }
+colored = "2.1"
+getrandom = "0.2"
+iana-time-zone = "0.1"
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+terminal_size = "0.4"
+unicode-width = "0.2"
+toml = "0.8"
+ureq = { version = "2.10", default-features = false, features = ["tls", "gzip"] }
+url = "2.5"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[[bin]]
+name = "today"
+path = "src/main.rs"

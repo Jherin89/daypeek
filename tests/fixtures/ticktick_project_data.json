@@ -1,0 +1,40 @@
+{
+  "project": { "id": "inbox114478622", "name": "Inbox" },
+  "tasks": [
+    {
+      "id": "63b7bebb91c0a5474805fcd4",
+      "projectId": "inbox114478622",
+      "title": "Renew passport",
+      "isAllDay": true,
+      "dueDate": "2026-10-21T04:00:00.000+0000",
+      "timeZone": "America/New_York",
+      "priority": 5,
+      "status": 0
+    },
+    {
+      "id": "63b7bebb91c0a5474805fcd5",
+      "projectId": "inbox114478622",
+      "title": "Book flights",
+      "isAllDay": false,
+      "dueDate": "2026-10-18T21:30:00.000+0000",
+      "timeZone": "America/New_York",
+      "priority": 1,
+      "status": 0
+    },
+    {
+      "id": "63b7bebb91c0a5474805fcd6",
+      "projectId": "inbox114478622",
+      "title": "Already done",
+      "dueDate": "2026-10-20T04:00:00.000+0000",
+      "priority": 3,
+      "status": 2
+    },
+    {
+      "id": "63b7bebb91c0a5474805fcd7",
+      "projectId": "inbox114478622",
+      "title": "Someday idea",
+      "priority": 0,
+      "status": 0
+    }
+  ]
+}

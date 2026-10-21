@@ -1,0 +1,5 @@
+(A) 2026-10-19 Call Mom +family @phone due:2026-10-21
+(B) Renew car registration +errands due:2026-10-18
+x 2026-10-20 2026-10-15 Pay electric bill due:2026-10-20
+Plan sprint due:2026-10-21 t:2026-10-19
+Someday learn the cello +hobbies
