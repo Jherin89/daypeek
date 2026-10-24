@@ -9,7 +9,7 @@
 #                 the first of ~/.local/bin, ~/bin, /usr/local/bin that is on
 #                 your PATH (and writable), else ~/.local/bin plus the exact
 #                 line to add it to your PATH
-#   --version V   install tag V (e.g. v0.2.0) instead of the latest release
+#   --version V   install tag V (e.g. v0.3.0) instead of the latest release
 #   --dry-run     show what would happen, change nothing
 #
 # Prebuilt binaries: macOS (Apple Silicon and Intel) and x86_64 Linux. Anything

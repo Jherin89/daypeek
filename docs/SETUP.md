@@ -63,7 +63,7 @@ Choose the folder with `DAYPEEK_INSTALL_DIR`, or with options after `sh -s --`:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Jherin89/daypeek/main/install.sh | DAYPEEK_INSTALL_DIR=~/bin sh
-curl -fsSL https://raw.githubusercontent.com/Jherin89/daypeek/main/install.sh | sh -s -- --dir ~/bin --version v0.2.0
+curl -fsSL https://raw.githubusercontent.com/Jherin89/daypeek/main/install.sh | sh -s -- --dir ~/bin --version v0.3.0
 ```
 
 If there's no release for your platform yet, it prints the Cargo command from
@@ -128,7 +128,7 @@ cargo install daypeek
 
 Cargo puts the binary in `~/.cargo/bin`, which rustup adds to your `PATH`.
 
-✅ **Check:** `daypeek --version` prints `daypeek 0.2.0`.
+✅ **Check:** `daypeek --version` prints `daypeek 0.3.0`.
 
 ## 2. Try the demo
 

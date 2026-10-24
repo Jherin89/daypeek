@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-23
+
 ### Added
 
 - **Linear, Asana and Trello.** Linear shows open issues assigned to you that
@@ -131,6 +133,7 @@ All notable changes to this project are documented here. The format follows
 - CI (Ubuntu and macOS) and a release workflow for `aarch64-apple-darwin` and
   `x86_64-unknown-linux-gnu`.
 
-[Unreleased]: https://github.com/Jherin89/daypeek/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/Jherin89/daypeek/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/Jherin89/daypeek/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Jherin89/daypeek/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Jherin89/daypeek/releases/tag/v0.1.0
