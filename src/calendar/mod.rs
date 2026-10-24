@@ -1,5 +1,6 @@
 //! Calendar section: iCal feeds → today's events.
 
+pub mod caldav;
 pub mod ics;
 pub mod rrule;
 
@@ -8,7 +9,7 @@ use std::collections::{HashMap, HashSet};
 use chrono::{DateTime, Duration, NaiveDate, NaiveTime, Utc};
 use chrono_tz::Tz;
 
-use crate::config::expand_tilde;
+use crate::config::{expand_tilde, CalendarSource};
 use crate::error::{Error, Result};
 use crate::http::Http;
 use crate::model::Event;
@@ -18,6 +19,65 @@ use ics::{IcsTime, RawEvent};
 pub fn is_remote(url: &str) -> bool {
     let u = url.trim();
     u.starts_with("http://") || u.starts_with("https://") || u.starts_with("webcal://")
+}
+
+/// Does this calendar need the network (and go through the cache)?
+pub fn is_remote_source(c: &CalendarSource) -> bool {
+    c.is_caldav() || is_remote(&c.url)
+}
+
+/// "iCal" or "CalDAV", for status lines.
+pub fn source_label(c: &CalendarSource) -> &'static str {
+    if c.is_caldav() {
+        "CalDAV"
+    } else {
+        "iCal"
+    }
+}
+
+/// The CalDAV password: `$DAYPEEK_<ID>_PASSWORD` (or `password_env`), then
+/// the Keychain item `daypeek-<id>`, then `password` in the config.
+pub fn caldav_password(c: &CalendarSource) -> Option<String> {
+    crate::secrets::resolve(
+        &c.secret_id(),
+        "token",
+        &c.password_env(),
+        c.password.as_deref(),
+    )
+}
+
+/// Cheap pre-flight (no network): is a CalDAV calendar fully configured?
+pub fn check_source(c: &CalendarSource) -> Result<()> {
+    if !c.is_caldav() {
+        return Ok(());
+    }
+    if c.username.as_deref().is_none_or(|u| u.trim().is_empty()) {
+        return Err(Error::Config(format!(
+            "calendar {:?}: CalDAV needs `username`",
+            c.name
+        )));
+    }
+    if caldav_password(c).is_none() {
+        return Err(Error::AuthMissing(format!(
+            "{} (an app-specific password)",
+            crate::secrets::hint(&c.secret_id(), "token", &c.password_env())
+        )));
+    }
+    Ok(())
+}
+
+/// Fetch one `[[calendars]]` entry as iCalendar text. CalDAV fetches the
+/// events from yesterday through a week from tomorrow, enough for every
+/// view, so one cached copy serves today, tomorrow and week.
+pub fn fetch_source(http: &Http, c: &CalendarSource, today: NaiveDate, tz: Tz) -> Result<String> {
+    if !c.is_caldav() {
+        return fetch_feed(http, &c.url);
+    }
+    check_source(c)?;
+    let password = caldav_password(c).unwrap_or_default();
+    let (start, _) = day_window(today - Duration::days(1), tz);
+    let (end, _) = day_window(today + Duration::days(8), tz);
+    caldav::fetch(http, c, &password, start, end)
 }
 
 /// Download (or read) a feed. `webcal://` is treated as `https://`.

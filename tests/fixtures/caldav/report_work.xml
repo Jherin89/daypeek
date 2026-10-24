@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<multistatus xmlns="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <response>
+    <href>/123/calendars/work/review.ics</href>
+    <propstat>
+      <prop>
+        <C:calendar-data>BEGIN:VCALENDAR&#13;
+VERSION:2.0&#13;
+BEGIN:VEVENT&#13;
+UID:review-1@example.com&#13;
+DTSTART;TZID=America/New_York:20261021T150000&#13;
+DTEND;TZID=America/New_York:20261021T160000&#13;
+SUMMARY:Design review&#13;
+END:VEVENT&#13;
+END:VCALENDAR&#13;
+</C:calendar-data>
+      </prop>
+      <status>HTTP/1.1 200 OK</status>
+    </propstat>
+  </response>
+</multistatus>

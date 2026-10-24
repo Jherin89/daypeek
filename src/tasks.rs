@@ -73,6 +73,11 @@ pub fn merge_window(
                 if existing.context.is_none() {
                     existing.context = task.context;
                 }
+                for r in task.refs {
+                    if !existing.refs.contains(&r) {
+                        existing.refs.push(r);
+                    }
+                }
             }
             None => {
                 index.insert(key, out.len());

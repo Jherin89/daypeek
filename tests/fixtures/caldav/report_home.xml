@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<d:multistatus xmlns:d="DAV:" xmlns:cal="urn:ietf:params:xml:ns:caldav">
+  <d:response>
+    <d:href>/123/calendars/home/standup.ics</d:href>
+    <d:propstat>
+      <d:prop>
+        <cal:calendar-data>BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Example//Test//EN
+BEGIN:VTIMEZONE
+TZID:America/New_York
+END:VTIMEZONE
+BEGIN:VEVENT
+UID:standup-1@example.com
+DTSTAMP:20261001T120000Z
+DTSTART;TZID=America/New_York:20261014T093000
+DTEND;TZID=America/New_York:20261014T094500
+RRULE:FREQ=WEEKLY;BYDAY=WE
+SUMMARY:Standup
+END:VEVENT
+END:VCALENDAR
+</cal:calendar-data>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+  <d:response>
+    <d:href>/123/calendars/home/dentist.ics</d:href>
+    <d:propstat>
+      <d:prop>
+        <cal:calendar-data><![CDATA[BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Example//Test//EN
+BEGIN:VEVENT
+UID:dentist-1@example.com
+DTSTAMP:20261001T120000Z
+DTSTART:20261021T140000Z
+DTEND:20261021T150000Z
+SUMMARY:Dentist
+LOCATION:Bright Smiles Dental
+END:VEVENT
+END:VCALENDAR
+]]></cal:calendar-data>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+</d:multistatus>

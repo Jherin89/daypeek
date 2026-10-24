@@ -65,8 +65,10 @@ impl View {
         }
     }
 
+    pub const ALL: [View; 3] = [View::Today, View::Tomorrow, View::Week];
+
     /// Task results differ per view, so each view caches separately.
-    fn cache_suffix(self) -> &'static str {
+    pub fn cache_suffix(self) -> &'static str {
         match self {
             View::Today => "",
             View::Tomorrow => "@tomorrow",
@@ -106,7 +108,19 @@ pub struct Snapshot {
     pub notes: Vec<NoteExcerpt>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub weather: Option<Sourced<Weather>>,
+    /// Provider ids `daypeek done` may change (`allow_write = true`). Tasks
+    /// from these get numbers on screen. Empty = read-only (the default).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub writable: Vec<String>,
     pub demo: bool,
+}
+
+/// Cache keys holding provider instance `id`'s task lists (one per view).
+pub fn provider_cache_keys(id: &str) -> Vec<String> {
+    View::ALL
+        .iter()
+        .map(|v| format!("provider-{id}{}", v.cache_suffix()))
+        .collect()
 }
 
 /// Resolve the user's time zone: config → system → UTC.
@@ -154,6 +168,11 @@ pub fn gather(cfg: &Config, cache: &Cache, now: DateTime<Utc>, view: View) -> Sn
         tz,
     };
     let (built, broken) = providers::build_all(cfg);
+    let writable: Vec<String> = built
+        .iter()
+        .filter(|p| p.can_complete() && providers::write_allowed(cfg, p.id()))
+        .map(|p| p.id().to_string())
+        .collect();
 
     let (cal_results, provider_results, weather) = std::thread::scope(|s| {
         let cal_handles: Vec<_> = cfg
@@ -163,10 +182,21 @@ pub fn gather(cfg: &Config, cache: &Cache, now: DateTime<Utc>, view: View) -> Sn
                 let http = &http;
                 s.spawn(move || {
                     let key = format!("calendar-{}", c.name);
-                    let network = calendar::is_remote(&c.url);
-                    let feed = cache.fetch_with(&key, &c.name, network, || {
-                        calendar::fetch_feed(http, &c.url)
-                    });
+                    let network = calendar::is_remote_source(c);
+                    // Like providers: a missing password isn't a network
+                    // problem, so say so even offline.
+                    let feed: Sourced<String> = match calendar::check_source(c) {
+                        Err(e) => Sourced {
+                            source: c.name.clone(),
+                            freshness: Freshness::Failed {
+                                error: e.to_string(),
+                            },
+                            data: None,
+                        },
+                        Ok(()) => cache.fetch_with(&key, &c.name, network, || {
+                            calendar::fetch_source(http, c, today, tz)
+                        }),
+                    };
                     (c, feed)
                 })
             })
@@ -176,7 +206,7 @@ pub fn gather(cfg: &Config, cache: &Cache, now: DateTime<Utc>, view: View) -> Sn
             .map(|p| {
                 let ctx = &ctx;
                 s.spawn(move || {
-                    let key = format!("provider-{}{}", p.id(), view.cache_suffix());
+                    let key = provider_cache_keys(p.id())[view as usize].clone();
                     let network = p.kind() == providers::Kind::Cloud;
                     // Missing credentials / wrong platform aren't network
                     // problems: report them even in --offline mode.
@@ -218,7 +248,7 @@ pub fn gather(cfg: &Config, cache: &Cache, now: DateTime<Utc>, view: View) -> Sn
         }
         calendars.push(SourceStatus {
             id: c.name.clone(),
-            name: "iCal".into(),
+            name: calendar::source_label(c).into(),
             freshness: feed.freshness,
         });
     }
@@ -263,6 +293,7 @@ pub fn gather(cfg: &Config, cache: &Cache, now: DateTime<Utc>, view: View) -> Sn
         providers: statuses,
         notes,
         weather,
+        writable,
         demo: false,
     }
 }

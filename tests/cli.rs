@@ -488,3 +488,55 @@ fn refresh_is_accepted_and_conflicts_with_offline() {
     let (ok, _, _) = run(&["--refresh", "--offline", "--demo"]);
     assert!(!ok);
 }
+
+#[test]
+fn watch_flags_are_checked() {
+    // --watch redraws a terminal: not with --json, and not when piped.
+    let (ok, _, err) = run(&["--demo", "--watch", "--json"]);
+    assert!(!ok);
+    assert!(err.contains("cannot be used with"), "{err}");
+    let (ok, _, err) = run(&["--demo", "--every", "30"]);
+    assert!(!ok);
+    assert!(err.contains("--watch"), "{err}");
+    let (ok, _, err) = run(&["--demo", "--watch", "--every", "1"]);
+    assert!(!ok, "{err}");
+    let (ok, _, err) = run(&["--demo", "week", "--watch", "--every", "30"]);
+    assert!(!ok);
+    assert!(err.contains("needs a terminal"), "{err}");
+    let (ok, _, err) = run(&["--demo", "providers", "--watch"]);
+    assert!(!ok);
+    assert!(err.contains("today, tomorrow, or week"), "{err}");
+}
+
+#[test]
+fn done_is_read_only_by_default() {
+    let dir = fixture_config("[providers.todoist]\n");
+    let cfg = dir.path().join("config.toml");
+    let (ok, _, err) = run(&["--config", cfg.to_str().unwrap(), "done", "1", "--yes"]);
+    assert!(!ok);
+    assert!(err.contains("read-only by default"), "{err}");
+    assert!(err.contains("allow_write = true"), "{err}");
+    // No numbers on a read-only dashboard.
+    let (ok, out, _) = run(&["--demo", "--at", AT, "--color", "never"]);
+    assert!(ok);
+    assert!(!out.contains("  1 "), "{out}");
+}
+
+#[test]
+fn demo_done_changes_nothing() {
+    let (ok, out, err) = run(&["--demo", "--demo-write", "--at", AT, "--color", "never"]);
+    assert!(ok, "{err}");
+    assert!(
+        out.contains("  1 "),
+        "numbers next to writable tasks:\n{out}"
+    );
+    let (ok, out, err) = run(&["--demo", "--at", AT, "done", "1", "--yes"]);
+    assert!(ok, "{err}");
+    assert!(
+        out.contains("Would complete") && out.contains("Nothing was changed"),
+        "{out}"
+    );
+    let (ok, _, err) = run(&["--demo", "--at", AT, "done", "99", "--yes"]);
+    assert!(!ok);
+    assert!(err.contains("99"), "{err}");
+}

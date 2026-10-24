@@ -227,16 +227,42 @@ impl Wizard {
         self.step(
             "2/4",
             "Calendars",
-            "Paste an iCal link (.ics or webcal://). Google: Settings → your calendar →\n    Integrate calendar → \"Secret address in iCal format\".",
+            "An iCal link (Google: Settings → your calendar → Integrate calendar →\n    \"Secret address in iCal format\"), or a CalDAV account (iCloud, Fastmail, Nextcloud).",
         );
         loop {
-            let n = answers.calendars.len();
-            let url: String = Input::with_theme(&self.theme)
+            let n = answers.calendars.len() + answers.caldav.len();
+            let kind = Select::with_theme(&self.theme)
                 .with_prompt(if n == 0 {
-                    "iCal URL (Enter to skip)"
+                    "Add a calendar?"
                 } else {
-                    "Another iCal URL (Enter when done)"
+                    "Add another calendar?"
                 })
+                .items(&[
+                    "iCal link        (.ics or webcal://)",
+                    "CalDAV account   (iCloud, Fastmail, Nextcloud, …)",
+                    if n == 0 { "Skip" } else { "Done" },
+                ])
+                .default(if n == 0 { 0 } else { 2 })
+                .interact()
+                .map_err(err)?;
+            match kind {
+                0 => {}
+                1 => {
+                    let taken: Vec<String> = answers
+                        .calendars
+                        .iter()
+                        .map(|c| c.0.clone())
+                        .chain(answers.caldav.iter().map(|c| c.name.clone()))
+                        .collect();
+                    if let Some(c) = self.caldav(&taken)? {
+                        answers.caldav.push(c);
+                    }
+                    continue;
+                }
+                _ => break,
+            }
+            let url: String = Input::with_theme(&self.theme)
+                .with_prompt("iCal URL (Enter to go back)")
                 .allow_empty(true)
                 .validate_with(|s: &String| -> Result<(), &str> {
                     if s.trim().is_empty() || setup::looks_like_calendar(s) {
@@ -249,7 +275,7 @@ impl Wizard {
                 .map_err(err)?;
             let url = url.trim().to_string();
             if url.is_empty() {
-                break;
+                continue;
             }
             let name: String = Input::with_theme(&self.theme)
                 .with_prompt("Name for this calendar")
@@ -297,7 +323,7 @@ impl Wizard {
                 "✓".green(),
                 tilde(&self.opts.path),
                 plural(answers.apps.len(), "app"),
-                plural(answers.calendars.len(), "calendar"),
+                plural(answers.calendars.len() + answers.caldav.len(), "calendar"),
                 if answers.city.is_some() {
                     ", weather"
                 } else {
@@ -346,11 +372,11 @@ impl Wizard {
         let t = &theme;
         let cfg = match app.id {
             "todoist" => {
-                self.secret(app, "token", "DAYPEEK_TODOIST_TOKEN", "API token")?;
+                self.secret(app.id, "token", "DAYPEEK_TODOIST_TOKEN", "API token")?;
                 AppConfig::Todoist
             }
             "notion" => {
-                self.secret(app, "token", "NOTION_TOKEN", "API token")?;
+                self.secret(app.id, "token", "NOTION_TOKEN", "API token")?;
                 let raw: String = Input::with_theme(t)
                     .with_prompt("Database link or ID")
                     .validate_with(|s: &String| -> Result<(), &str> {
@@ -400,7 +426,7 @@ impl Wizard {
                 let secret = match app.id {
                     // Google needs the secret on every refresh: keep it.
                     "gtasks" => self.secret(
-                        app,
+                        app.id,
                         "client_secret",
                         "GTASKS_CLIENT_SECRET",
                         "Client secret",
@@ -421,6 +447,39 @@ impl Wizard {
                     "ticktick" => AppConfig::TickTick { client_id },
                     "mstodo" => AppConfig::MsTodo { client_id, tenant },
                     _ => AppConfig::GTasks { client_id },
+                }
+            }
+            "linear" => {
+                self.secret(app.id, "token", "LINEAR_API_KEY", "Personal API key")?;
+                AppConfig::Linear
+            }
+            "asana" => {
+                self.secret(app.id, "token", "ASANA_TOKEN", "Personal access token")?;
+                let workspace: String = Input::with_theme(t)
+                    .with_prompt("Workspace name (Enter = all your workspaces)")
+                    .allow_empty(true)
+                    .interact_text()
+                    .map_err(err)?;
+                AppConfig::Asana {
+                    workspace: workspace.trim().to_string(),
+                }
+            }
+            "trello" => {
+                self.secret(app.id, "api_key", "TRELLO_API_KEY", "API key")?;
+                eprintln!(
+                    "    Next to the API key, click {} → Allow, and copy the token.",
+                    "Token".bold()
+                );
+                self.secret(app.id, "token", "TRELLO_TOKEN", "Token")?;
+                let raw: String = Input::with_theme(t)
+                    .with_prompt(
+                        "Boards (comma-separated; Enter = cards assigned to you on any board)",
+                    )
+                    .allow_empty(true)
+                    .interact_text()
+                    .map_err(err)?;
+                AppConfig::Trello {
+                    boards: setup::split_list(&raw),
                 }
             }
             "things" => AppConfig::Things,
@@ -473,17 +532,167 @@ impl Wizard {
         Ok(Some(cfg))
     }
 
+    /// One CalDAV account: server, username, app password (to the Keychain),
+    /// then optionally look up its calendars and pick some.
+    fn caldav(&mut self, taken: &[String]) -> Result<Option<setup::CalDavAnswer>, String> {
+        let theme = ColorfulTheme::default();
+        let t = &theme;
+        let services = ["iCloud", "Fastmail", "Nextcloud", "Other CalDAV server"];
+        let i = Select::with_theme(t)
+            .with_prompt("Which service?")
+            .items(&services)
+            .default(0)
+            .interact()
+            .map_err(err)?;
+        let (hint, user_hint) = match i {
+            0 => (
+                "Make an app-specific password: account.apple.com → Sign-In and Security →\n    App-Specific Passwords → \"+\". (Your normal Apple password won't work.)",
+                "Apple Account email",
+            ),
+            1 => (
+                "Make an app password: Settings → Privacy & Security → Manage app passwords\n    and access → New app password, with access to Calendars (CalDAV).",
+                "Fastmail email address",
+            ),
+            2 => (
+                "Make an app password: your avatar → Settings → Security → Devices & sessions\n    → Create new app password.",
+                "Nextcloud username",
+            ),
+            _ => (
+                "Use your server's CalDAV address and, if it offers one, an app password.",
+                "Username",
+            ),
+        };
+        eprintln!("    {}", hint.dimmed());
+        let url = match i {
+            0 | 1 => setup::CALDAV_PRESETS[i].1.to_string(),
+            2 => {
+                let host: String = Input::with_theme(t)
+                    .with_prompt("Nextcloud address (e.g. https://cloud.example.com)")
+                    .validate_with(|s: &String| -> Result<(), &str> {
+                        if s.trim().starts_with("https://") || s.trim().starts_with("http://") {
+                            Ok(())
+                        } else {
+                            Err("start with https://")
+                        }
+                    })
+                    .interact_text()
+                    .map_err(err)?;
+                setup::nextcloud_dav_url(&host)
+            }
+            _ => Input::with_theme(t)
+                .with_prompt("CalDAV URL")
+                .validate_with(|s: &String| -> Result<(), &str> {
+                    if s.trim().starts_with("https://") || s.trim().starts_with("http://") {
+                        Ok(())
+                    } else {
+                        Err("start with https://")
+                    }
+                })
+                .interact_text()
+                .map_err(err)?
+                .trim()
+                .to_string(),
+        };
+        let default_name = match i {
+            0..=2 => services[i].to_string(),
+            _ => "CalDAV".to_string(),
+        };
+        let default_name = setup::unique_name(&default_name, taken);
+        let name: String = Input::with_theme(t)
+            .with_prompt("Name for this calendar")
+            .default(default_name)
+            .interact_text()
+            .map_err(err)?;
+        let username: String = Input::with_theme(t)
+            .with_prompt(user_hint)
+            .interact_text()
+            .map_err(err)?;
+        let username = username.trim().to_string();
+        let id = crate::config::slug(&name);
+        let env = crate::config::default_password_env(&id);
+        let mut password = self.secret(&id, "token", &env, "App password")?;
+        if password.is_none() && !self.keychain {
+            // No Keychain (Linux): use it once to list calendars, keep nothing.
+            password = Some(
+                Password::with_theme(t)
+                    .with_prompt(
+                        "App password, used once to list your calendars (hidden, Enter to skip)",
+                    )
+                    .allow_empty_password(true)
+                    .interact()
+                    .map_err(err)?,
+            )
+            .filter(|p| !p.trim().is_empty());
+        }
+        let calendars = match password {
+            Some(p) => self.pick_calendars(&url, &username, &p)?,
+            None => Vec::new(),
+        };
+        Ok(Some(setup::CalDavAnswer {
+            name,
+            url,
+            username,
+            calendars,
+        }))
+    }
+
+    /// Look up the account's calendars and let the user untick some.
+    /// Returns the picked names, or empty for "all".
+    fn pick_calendars(
+        &self,
+        url: &str,
+        username: &str,
+        password: &str,
+    ) -> Result<Vec<String>, String> {
+        eprintln!("    {} looking up your calendars…", "→".cyan());
+        let names: Vec<String> = if self.opts.demo {
+            vec!["Home".into(), "Work".into(), "Family".into()]
+        } else {
+            let http = Http::new(Duration::from_secs(15));
+            let acct = crate::calendar::caldav::Account {
+                url,
+                username,
+                password,
+            };
+            match crate::calendar::caldav::discover(&http, &acct) {
+                Ok(found) => found.into_iter().map(|c| c.name).collect(),
+                Err(e) => {
+                    eprintln!(
+                        "    {} {e}\n      (saved anyway; fix it later and check with `daypeek providers`)",
+                        "!".red()
+                    );
+                    return Ok(Vec::new());
+                }
+            }
+        };
+        if names.is_empty() {
+            eprintln!("    {} no calendars with events found", "!".yellow());
+            return Ok(Vec::new());
+        }
+        let picked = MultiSelect::with_theme(&self.theme)
+            .with_prompt("Show which calendars? (Space toggles)")
+            .items(&names)
+            .defaults(&vec![true; names.len()])
+            .interact()
+            .map_err(err)?;
+        if picked.len() == names.len() || picked.is_empty() {
+            Ok(Vec::new())
+        } else {
+            Ok(picked.into_iter().map(|i| names[i].clone()).collect())
+        }
+    }
+
     /// Ask for a secret with hidden input and keep it in the Keychain
     /// (macOS), or tell the user which env var to set (Linux). Returns the
     /// value typed, if any.
     fn secret(
         &mut self,
-        app: &App,
+        instance: &str,
         name: &str,
         env: &str,
         label: &str,
     ) -> Result<Option<String>, String> {
-        let service = secrets::keychain_service(app.id, name);
+        let service = secrets::keychain_service(instance, name);
         if !self.keychain {
             eprintln!("    Linux: keep it in an env var instead of the config file.");
             self.exports

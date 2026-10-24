@@ -161,14 +161,14 @@ fn demo_todoist(today: NaiveDate) -> String {
     let d = |off: i64| iso(today + Duration::days(off));
     format!(
         r#"{{"results":[
-          {{"content":"Submit expense report","priority":4,"due":{{"date":"{}"}}}},
-          {{"content":"Review Alex's pull request","priority":3,"due":{{"date":"{}T15:00:00"}}}},
-          {{"content":"Call the pharmacy","priority":2,"due":{{"date":"{}"}}}},
-          {{"content":"Water the plants","priority":1,"due":{{"date":"{}"}}}},
-          {{"content":"Pick up dry cleaning","priority":2,"due":{{"date":"{}"}}}},
-          {{"content":"Send invoice to Acme","priority":4,"due":{{"date":"{}"}}}},
-          {{"content":"Pack for Savannah","priority":3,"due":{{"date":"{}"}}}},
-          {{"content":"Plan next week's sprint","priority":1,"due":{{"date":"{}"}}}}
+          {{"id":"demo-1","content":"Submit expense report","priority":4,"due":{{"date":"{}"}}}},
+          {{"id":"demo-2","content":"Review Alex's pull request","priority":3,"due":{{"date":"{}T15:00:00"}}}},
+          {{"id":"demo-3","content":"Call the pharmacy","priority":2,"due":{{"date":"{}"}}}},
+          {{"id":"demo-4","content":"Water the plants","priority":1,"due":{{"date":"{}"}}}},
+          {{"id":"demo-5","content":"Pick up dry cleaning","priority":2,"due":{{"date":"{}"}}}},
+          {{"id":"demo-6","content":"Send invoice to Acme","priority":4,"due":{{"date":"{}"}}}},
+          {{"id":"demo-7","content":"Pack for Savannah","priority":3,"due":{{"date":"{}"}}}},
+          {{"id":"demo-8","content":"Plan next week's sprint","priority":1,"due":{{"date":"{}"}}}}
         ],"next_cursor":null}}"#,
         d(-2),
         d(0),
@@ -221,7 +221,11 @@ pub fn snapshot(now: DateTime<Tz>, view: View) -> Snapshot {
     )
     .with_context("Family");
     things.sources.push("things".into());
-    let mut ticktick = Task::new("Renew car registration", Some(today), Priority::Medium);
+    let mut ticktick = Task::new("Renew car registration", Some(today), Priority::Medium).with_ref(
+        "ticktick",
+        "demo-tt-1",
+        Some("inbox"),
+    );
     ticktick.sources.push("ticktick".into());
 
     let merged = tasks::merge_window(
@@ -287,6 +291,7 @@ pub fn snapshot(now: DateTime<Tz>, view: View) -> Snapshot {
                 days: demo_forecast(today),
             }),
         }),
+        writable: Vec::new(),
         demo: true,
     }
 }
@@ -376,10 +381,29 @@ pub fn provider_rows() -> Vec<(String, String, String, Health)> {
             Health::Ok("1 task due + daily note".into()),
         ),
         r(
+            "linear",
+            "Linear",
+            "cloud",
+            Health::Ok("2 tasks due".into()),
+        ),
+        r("asana", "Asana", "cloud", Health::Ok("3 tasks due".into())),
+        r(
+            "trello",
+            "Trello",
+            "cloud",
+            Health::AuthMissing("set $TRELLO_TOKEN".into()),
+        ),
+        r(
             "Personal",
             "iCal calendar",
             "cloud",
             Health::Ok("7 events today".into()),
+        ),
+        r(
+            "iCloud",
+            "CalDAV calendar",
+            "cloud",
+            Health::Ok("2 events today".into()),
         ),
         r(
             "weather",
@@ -435,6 +459,14 @@ pub fn provider_rows_for(a: &crate::setup::Answers) -> Vec<(String, String, Stri
             "iCal calendar".into(),
             "cloud".into(),
             Health::Ok("7 events today".into()),
+        ));
+    }
+    for c in &a.caldav {
+        rows.push((
+            c.name.clone(),
+            "CalDAV calendar".into(),
+            "cloud".into(),
+            Health::Ok("2 events today".into()),
         ));
     }
     if a.city.is_some() {

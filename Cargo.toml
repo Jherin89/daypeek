@@ -6,7 +6,7 @@ rust-version = "1.85"
 resolver = "3"
 authors = ["Jordan Herin"]
 license = "MIT"
-description = "A fast one-screen daily dashboard for your terminal: calendar, tasks from 10 apps, and weather"
+description = "A fast one-screen daily dashboard for your terminal: calendar, tasks from 13 apps, and weather"
 readme = "README.md"
 repository = "https://github.com/Jherin89/daypeek"
 homepage = "https://github.com/Jherin89/daypeek"
@@ -32,6 +32,8 @@ toml = "0.8"
 ureq = { version = "2.10", default-features = false, features = ["tls", "gzip"] }
 url = "2.5"
 dialoguer = { version = "0.11", default-features = false, features = ["password"] }
+quick-xml = "0.41"
+crossterm = { version = "0.29", default-features = false, features = ["events"] }
 
 [dev-dependencies]
 tempfile = "3"

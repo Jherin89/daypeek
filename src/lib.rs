@@ -9,6 +9,7 @@ pub mod calendar;
 pub mod config;
 pub mod demo;
 pub mod detect;
+pub mod done;
 pub mod error;
 pub mod http;
 pub mod model;
@@ -19,5 +20,8 @@ pub mod secrets;
 pub mod setup;
 pub mod snapshot;
 pub mod tasks;
+#[cfg(test)]
+pub mod testserver;
+pub mod watch;
 pub mod weather;
 pub mod wizard;

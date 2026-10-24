@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<d:multistatus xmlns:d="DAV:" xmlns:cal="urn:ietf:params:xml:ns:caldav">
+  <d:response>
+    <d:href>/123/calendars/</d:href>
+    <d:propstat>
+      <d:prop><d:resourcetype><d:collection/></d:resourcetype><d:displayname/></d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+  <d:response>
+    <d:href>/123/calendars/home/</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:resourcetype><d:collection/><cal:calendar/></d:resourcetype>
+        <d:displayname>Home</d:displayname>
+        <cal:supported-calendar-component-set><cal:comp name="VEVENT"></cal:comp></cal:supported-calendar-component-set>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+  <d:response>
+    <d:href>/123/calendars/work/</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:resourcetype><d:collection/><cal:calendar/></d:resourcetype>
+        <d:displayname>Work &amp; Projects</d:displayname>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+    <d:propstat>
+      <d:prop><cal:supported-calendar-component-set/></d:prop>
+      <d:status>HTTP/1.1 404 Not Found</d:status>
+    </d:propstat>
+  </d:response>
+  <d:response>
+    <d:href>/123/calendars/reminders/</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:resourcetype><d:collection/><cal:calendar/></d:resourcetype>
+        <d:displayname>Reminders</d:displayname>
+        <cal:supported-calendar-component-set><cal:comp name="VTODO"/></cal:supported-calendar-component-set>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+  <d:response>
+    <d:href>/123/calendars/inbox/</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:resourcetype><d:collection/><cal:schedule-inbox/></d:resourcetype>
+        <d:displayname>Inbox</d:displayname>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+</d:multistatus>

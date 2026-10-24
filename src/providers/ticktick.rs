@@ -10,7 +10,8 @@ use serde::Deserialize;
 
 use super::{settings, Ctx, Kind, Output, Provider};
 use crate::error::{Error, Result};
-use crate::model::{Priority, Task};
+use crate::http::{enc, Http};
+use crate::model::{Priority, Task, TaskRef};
 use crate::secrets;
 
 pub const TOKEN_ENV: &str = "TICKTICK_ACCESS_TOKEN";
@@ -69,6 +70,10 @@ pub struct ProjectData {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ApiTask {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub project_id: Option<String>,
     pub title: String,
     #[serde(default)]
     pub due_date: Option<String>,
@@ -101,7 +106,15 @@ pub fn due_date(s: &str, task_tz: Option<&str>, user_tz: Tz) -> Option<NaiveDate
     Some(dt.with_timezone(&tz).date_naive())
 }
 
-pub fn to_tasks(data: ProjectData, project: &str, source: &str, tz: Tz) -> Vec<Task> {
+/// `project_id` is the project the tasks were fetched from (completing a
+/// TickTick task needs it).
+pub fn to_tasks(
+    data: ProjectData,
+    project: &str,
+    project_id: &str,
+    source: &str,
+    tz: Tz,
+) -> Vec<Task> {
     data.tasks
         .into_iter()
         .filter(|t| t.status == 0)
@@ -110,7 +123,10 @@ pub fn to_tasks(data: ProjectData, project: &str, source: &str, tz: Tz) -> Vec<T
                 .due_date
                 .as_deref()
                 .and_then(|d| due_date(d, t.time_zone.as_deref(), tz));
-            let mut task = Task::new(t.title, due, priority(t.priority)).with_context(project);
+            let pid = t.project_id.as_deref().unwrap_or(project_id);
+            let mut task = Task::new(t.title, due, priority(t.priority))
+                .with_context(project)
+                .with_ref(source, &t.id, Some(pid));
             task.sources.push(source.to_string());
             task
         })
@@ -177,7 +193,7 @@ impl Provider for TickTick {
                     let token = &token;
                     scope.spawn(move || -> Result<Vec<Task>> {
                         let data: ProjectData = ctx.http.get_json(&url, Some(token))?;
-                        Ok(to_tasks(data, name, &self.id, ctx.tz))
+                        Ok(to_tasks(data, name, pid, &self.id, ctx.tz))
                     })
                 })
                 .collect();
@@ -195,6 +211,31 @@ impl Provider for TickTick {
         }
         Ok(Output::tasks(tasks))
     }
+
+    fn can_complete(&self) -> bool {
+        true
+    }
+
+    /// `POST /open/v1/project/{projectId}/task/{taskId}/complete`. Needs a
+    /// token with the `tasks:write` scope (`daypeek auth ticktick` asks for
+    /// it once `allow_write = true` is set).
+    fn complete(&self, http: &Http, task: &TaskRef) -> Result<()> {
+        self.check()?;
+        let token = self.token().unwrap_or_default();
+        let project = task
+            .project
+            .as_deref()
+            .ok_or_else(|| Error::Parse("TickTick task has no project id".into()))?;
+        http.post_empty(
+            &format!(
+                "{}/open/v1/project/{}/task/{}/complete",
+                self.s.base_url.trim_end_matches('/'),
+                enc(project),
+                enc(&task.id)
+            ),
+            &format!("Bearer {token}"),
+        )
+    }
 }
 
 #[cfg(test)]
@@ -207,7 +248,13 @@ mod tests {
             "../../tests/fixtures/ticktick_project_data.json"
         ))
         .unwrap();
-        let tasks = to_tasks(data, "Inbox", "ticktick", chrono_tz::America::New_York);
+        let tasks = to_tasks(
+            data,
+            "Inbox",
+            "inbox",
+            "ticktick",
+            chrono_tz::America::New_York,
+        );
         // Completed and undated tasks are dropped.
         assert_eq!(tasks.len(), 2);
         assert_eq!(tasks[0].title, "Renew passport");
@@ -217,6 +264,37 @@ mod tests {
         assert_eq!(tasks[0].context.as_deref(), Some("Inbox"));
         assert_eq!(tasks[1].priority, Priority::Medium);
         assert_eq!(tasks[1].due, NaiveDate::from_ymd_opt(2026, 10, 18));
+        // The task's own projectId wins over the "inbox" alias it was fetched by.
+        assert_eq!(tasks[0].refs[0].project.as_deref(), Some("inbox114478622"));
+    }
+
+    #[test]
+    fn complete_posts_to_the_project_task() {
+        let server = crate::testserver::serve(|_| crate::testserver::Response::new(200, ""));
+        let p = TickTick {
+            id: "ticktick".into(),
+            s: Settings {
+                token: Some("tt".into()),
+                token_env: "DAYPEEK_TEST_TICKTICK_UNSET".into(),
+                base_url: server.url.clone(),
+                ..Settings::default()
+            },
+        };
+        let http = Http::new(std::time::Duration::from_secs(5));
+        let r = TaskRef {
+            source: "ticktick".into(),
+            id: "63b7".into(),
+            project: Some("inbox114478622".into()),
+        };
+        p.complete(&http, &r).unwrap();
+        let req = &server.requests()[0];
+        assert_eq!(
+            (req.method.as_str(), req.path.as_str()),
+            ("POST", "/open/v1/project/inbox114478622/task/63b7/complete")
+        );
+        assert_eq!(req.header("authorization"), Some("Bearer tt"));
+        let no_project = TaskRef { project: None, ..r };
+        assert!(p.complete(&http, &no_project).is_err());
     }
 
     #[test]

@@ -69,6 +69,30 @@ pub const APPS: &[App] = &[
         macos_only: false,
     },
     App {
+        id: "linear",
+        name: "Linear",
+        hint: "Linear → Settings → Security & access → Personal API keys → New API key",
+        link: "https://linear.app/developers/graphql",
+        guide: "linear",
+        macos_only: false,
+    },
+    App {
+        id: "asana",
+        name: "Asana",
+        hint: "Asana developer console (app.asana.com/0/my-apps) → Create new token",
+        link: "https://developers.asana.com/docs/personal-access-token",
+        guide: "asana",
+        macos_only: false,
+    },
+    App {
+        id: "trello",
+        name: "Trello",
+        hint: "Create a Power-Up at trello.com/power-ups/admin → API key → then the Token link",
+        link: "https://developer.atlassian.com/cloud/trello/guides/rest-api/api-introduction/",
+        guide: "trello",
+        macos_only: false,
+    },
+    App {
         id: "things",
         name: "Things 3",
         hint: "Nothing to set up: daypeek reads Things' local database (read-only)",
@@ -127,6 +151,9 @@ impl App {
             "todoist" => &[("token", "DAYPEEK_TODOIST_TOKEN")],
             "notion" => &[("token", "NOTION_TOKEN")],
             "gtasks" => &[("client_secret", "GTASKS_CLIENT_SECRET")],
+            "linear" => &[("token", "LINEAR_API_KEY")],
+            "asana" => &[("token", "ASANA_TOKEN")],
+            "trello" => &[("api_key", "TRELLO_API_KEY"), ("token", "TRELLO_TOKEN")],
             _ => &[],
         }
     }
@@ -157,6 +184,15 @@ pub enum AppConfig {
         date_property: String,
         done_property: String,
     },
+    Linear,
+    Asana {
+        /// Name or gid; empty means "your only workspace".
+        workspace: String,
+    },
+    Trello {
+        /// Board names or ids; empty means "cards assigned to me anywhere".
+        boards: Vec<String>,
+    },
     Things,
     Reminders,
     Obsidian {
@@ -181,6 +217,9 @@ impl AppConfig {
             AppConfig::MsTodo { .. } => "mstodo",
             AppConfig::GTasks { .. } => "gtasks",
             AppConfig::Notion { .. } => "notion",
+            AppConfig::Linear => "linear",
+            AppConfig::Asana { .. } => "asana",
+            AppConfig::Trello { .. } => "trello",
             AppConfig::Things => "things",
             AppConfig::Reminders => "reminders",
             AppConfig::Obsidian { .. } => "obsidian",
@@ -190,12 +229,30 @@ impl AppConfig {
     }
 }
 
+/// A CalDAV account from the wizard (the password went to the Keychain).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct CalDavAnswer {
+    pub name: String,
+    pub url: String,
+    pub username: String,
+    /// Calendar names to show; empty means all of them.
+    pub calendars: Vec<String>,
+}
+
+/// Where the popular CalDAV services live.
+pub const CALDAV_PRESETS: &[(&str, &str)] = &[
+    ("iCloud", "https://caldav.icloud.com/"),
+    ("Fastmail", "https://caldav.fastmail.com/"),
+    ("Nextcloud", "https://YOUR-SERVER/remote.php/dav"),
+];
+
 /// Everything the wizard collected.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Answers {
     pub apps: Vec<AppConfig>,
-    /// `(name, url)`
+    /// iCal links: `(name, url)`
     pub calendars: Vec<(String, String)>,
+    pub caldav: Vec<CalDavAnswer>,
     pub city: Option<String>,
     pub units: Units,
 }
@@ -218,7 +275,7 @@ pub fn render_config(a: &Answers) -> String {
          timeout_secs = 4\n",
     );
 
-    if !a.calendars.is_empty() {
+    if !a.calendars.is_empty() || !a.caldav.is_empty() {
         out.push_str("\n# ── Calendars ──────────────────────────────────────────────\n");
         for (name, url) in &a.calendars {
             let _ = write!(
@@ -227,6 +284,23 @@ pub fn render_config(a: &Answers) -> String {
                 q(name),
                 q(url)
             );
+        }
+        for c in &a.caldav {
+            let id = crate::config::slug(&c.name);
+            let _ = write!(
+                out,
+                "[[calendars]]\nname     = {}\ntype     = \"caldav\"\nurl      = {}\nusername = {}\n\
+                 # password: ${} or Keychain \"daypeek-{id}\"\n",
+                q(&c.name),
+                q(&c.url),
+                q(&c.username),
+                crate::config::default_password_env(&id),
+            );
+            if !c.calendars.is_empty() {
+                let list: Vec<String> = c.calendars.iter().map(|n| q(n)).collect();
+                let _ = writeln!(out, "calendars = [{}]", list.join(", "));
+            }
+            out.push('\n');
         }
         out.pop();
     }
@@ -276,6 +350,24 @@ pub fn render_config(a: &Answers) -> String {
                     q(date_property),
                     q(done_property)
                 );
+            }
+            AppConfig::Linear => out.push_str(
+                "# key: $LINEAR_API_KEY or Keychain \"daypeek-linear\"\n",
+            ),
+            AppConfig::Asana { workspace } => {
+                out.push_str("# token: $ASANA_TOKEN or Keychain \"daypeek-asana\"\n");
+                if !workspace.trim().is_empty() {
+                    let _ = writeln!(out, "workspace = {}", q(workspace.trim()));
+                }
+            }
+            AppConfig::Trello { boards } => {
+                out.push_str(
+                    "# key + token: $TRELLO_API_KEY / $TRELLO_TOKEN, or Keychain \"daypeek-trello-api-key\" / \"daypeek-trello\"\n",
+                );
+                if !boards.is_empty() {
+                    let list: Vec<String> = boards.iter().map(|b| q(b)).collect();
+                    let _ = writeln!(out, "boards = [{}]", list.join(", "));
+                }
             }
             AppConfig::Things | AppConfig::Reminders => {}
             AppConfig::Obsidian {
@@ -340,6 +432,28 @@ pub fn guess_calendar_name(url: &str, index: usize) -> String {
     }
 }
 
+/// `base`, or `base 2`, `base 3`… if that name is taken.
+pub fn unique_name(base: &str, taken: &[String]) -> String {
+    let free = |n: &str| !taken.iter().any(|t| t.eq_ignore_ascii_case(n));
+    if free(base) {
+        return base.to_string();
+    }
+    (2..)
+        .map(|i| format!("{base} {i}"))
+        .find(|n| free(n))
+        .unwrap_or_else(|| base.to_string())
+}
+
+/// `https://cloud.example.com/` → `https://cloud.example.com/remote.php/dav`.
+pub fn nextcloud_dav_url(host: &str) -> String {
+    let h = host.trim().trim_end_matches('/');
+    if h.contains("/remote.php/") {
+        h.to_string()
+    } else {
+        format!("{h}/remote.php/dav")
+    }
+}
+
 /// Basic sanity check for an iCal URL or path the user typed.
 pub fn looks_like_calendar(url: &str) -> bool {
     let u = url.trim();
@@ -376,6 +490,13 @@ mod tests {
                     date_property: "Due".into(),
                     done_property: "Done".into(),
                 },
+                AppConfig::Linear,
+                AppConfig::Asana {
+                    workspace: "Acme".into(),
+                },
+                AppConfig::Trello {
+                    boards: vec!["Side projects".into()],
+                },
                 AppConfig::Things,
                 AppConfig::Reminders,
                 AppConfig::Obsidian {
@@ -397,6 +518,12 @@ mod tests {
                 ),
                 ("iCloud".into(), "webcal://p01-caldav.icloud.com/y".into()),
             ],
+            caldav: vec![CalDavAnswer {
+                name: "Fastmail".into(),
+                url: "https://caldav.fastmail.com/".into(),
+                username: "me@example.com".into(),
+                calendars: vec!["Personal".into()],
+            }],
             city: Some("Evans, Georgia".into()),
             units: Units::Imperial,
         }
@@ -406,10 +533,15 @@ mod tests {
     fn every_app_round_trips_through_the_config_parser() {
         let text = render_config(&everything());
         let c = Config::parse(&text).unwrap_or_else(|e| panic!("{e}\n{text}"));
-        assert_eq!(c.calendars.len(), 2);
+        assert_eq!(c.calendars.len(), 3);
         assert_eq!(c.calendars[1].name, "iCloud");
+        assert!(c.calendars[2].is_caldav());
+        assert_eq!(c.calendars[2].username.as_deref(), Some("me@example.com"));
+        assert_eq!(c.calendars[2].calendars, vec!["Personal".to_string()]);
+        assert_eq!(c.calendars[2].password_env(), "DAYPEEK_FASTMAIL_PASSWORD");
+        assert!(text.contains("Keychain \"daypeek-fastmail\""));
         assert_eq!(c.weather().unwrap().city.as_deref(), Some("Evans, Georgia"));
-        assert_eq!(c.providers.len(), 10);
+        assert_eq!(c.providers.len(), 13);
         assert_eq!(
             c.providers["notion"]["title_property"].as_str(),
             Some("Task name")
@@ -425,7 +557,7 @@ mod tests {
             "{:?}",
             broken.iter().map(|b| &b.id).collect::<Vec<_>>()
         );
-        assert_eq!(built.len(), 10);
+        assert_eq!(built.len(), 13);
     }
 
     #[test]
@@ -463,6 +595,8 @@ mod tests {
             "token =",
             "token=",
             "client_secret",
+            "password =",
+            "api_key =",
             "refresh_token =",
             "access_token =",
         ] {
@@ -488,7 +622,7 @@ mod tests {
 
     #[test]
     fn catalog_is_consistent() {
-        assert_eq!(APPS.len(), 10);
+        assert_eq!(APPS.len(), 13);
         for app in APPS {
             assert!(
                 crate::providers::REGISTRY.iter().any(|r| r.0 == app.id),
@@ -503,6 +637,10 @@ mod tests {
             App::by_id("todoist").unwrap().secrets()[0].1,
             "DAYPEEK_TODOIST_TOKEN"
         );
+        assert_eq!(App::by_id("trello").unwrap().secrets().len(), 2);
+        assert!(CALDAV_PRESETS
+            .iter()
+            .all(|(_, u)| u.starts_with("https://")));
     }
 
     #[test]
@@ -517,6 +655,19 @@ mod tests {
             "iCloud 2"
         );
         assert!(looks_like_calendar("webcal://x"));
+        assert_eq!(unique_name("iCloud", &["Google".into()]), "iCloud");
+        assert_eq!(
+            unique_name("iCloud", &["icloud".into(), "iCloud 2".into()]),
+            "iCloud 3"
+        );
+        assert_eq!(
+            nextcloud_dav_url(" https://cloud.example.com/ "),
+            "https://cloud.example.com/remote.php/dav"
+        );
+        assert_eq!(
+            nextcloud_dav_url("https://x.org/nc/remote.php/dav/"),
+            "https://x.org/nc/remote.php/dav"
+        );
         assert!(!looks_like_calendar("my calendar"));
     }
 }

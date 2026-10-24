@@ -3,7 +3,9 @@
 //! Adding a provider is three steps (see CONTRIBUTING.md): write a module that
 //! implements [`Provider`], register it in [`REGISTRY`], and add fixtures.
 
+pub mod asana;
 pub mod gtasks;
+pub mod linear;
 pub mod markdown;
 pub mod mdtasks;
 pub mod mstodo;
@@ -14,6 +16,7 @@ pub mod things;
 pub mod ticktick;
 pub mod todoist;
 pub mod todotxt;
+pub mod trello;
 
 use chrono::NaiveDate;
 use chrono_tz::Tz;
@@ -23,7 +26,7 @@ use serde::{Deserialize, Serialize};
 use crate::config::Config;
 use crate::error::{Error, Result};
 use crate::http::Http;
-use crate::model::{NoteExcerpt, Task};
+use crate::model::{NoteExcerpt, Task, TaskRef};
 
 /// Where a provider gets its data.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -98,6 +101,21 @@ pub trait Provider: Send + Sync {
     /// Fetch open tasks due today or overdue (and undated ones if configured).
     fn fetch(&self, ctx: &Ctx) -> Result<Output>;
 
+    /// Can this provider mark tasks done? (Todoist and TickTick.) Whether
+    /// it's *allowed* to is the user's call: see [`write_allowed`].
+    fn can_complete(&self) -> bool {
+        false
+    }
+
+    /// Mark one task done in the app (`daypeek done`). Only called when
+    /// [`write_allowed`] says yes.
+    fn complete(&self, _http: &Http, _task: &TaskRef) -> Result<()> {
+        Err(Error::Unsupported(format!(
+            "{} is read-only in daypeek",
+            self.name()
+        )))
+    }
+
     /// Full health check used by `daypeek providers`.
     fn health(&self, ctx: &Ctx) -> Health {
         if let Err(e) = self.check() {
@@ -144,6 +162,9 @@ pub const REGISTRY: &[(&str, &str, Kind, Builder)] = &[
         reminders::build,
     ),
     ("notion", "Notion", Kind::Cloud, notion::build),
+    ("linear", "Linear", Kind::Cloud, linear::build),
+    ("asana", "Asana", Kind::Cloud, asana::build),
+    ("trello", "Trello", Kind::Cloud, trello::build),
     ("obsidian", "Obsidian", Kind::Local, obsidian::build),
     ("todotxt", "todo.txt", Kind::Local, todotxt::build),
     ("markdown", "Markdown", Kind::Local, markdown::build),
@@ -172,6 +193,17 @@ pub fn build_all(cfg: &Config) -> (Vec<Box<dyn Provider>>, Vec<Broken>) {
                 continue;
             }
         };
+        // Read by `write_allowed`, not by the provider's own settings.
+        match table.remove("allow_write") {
+            None | Some(toml::Value::Boolean(_)) => {}
+            Some(_) => {
+                broken.push(Broken {
+                    id: id.clone(),
+                    error: Error::Config("`allow_write` must be true or false".into()),
+                });
+                continue;
+            }
+        }
         let kind = match table.remove("type") {
             Some(toml::Value::String(s)) => s,
             Some(_) => {
@@ -204,6 +236,16 @@ pub fn build_all(cfg: &Config) -> (Vec<Box<dyn Provider>>, Vec<Broken>) {
         }
     }
     (ok, broken)
+}
+
+/// May `daypeek done` change tasks in provider instance `id`? Off unless
+/// `allow_write = true` is set in `[providers.<id>]` or `[general]` (a
+/// provider-level `false` wins over the global switch).
+pub fn write_allowed(cfg: &Config, id: &str) -> bool {
+    match cfg.providers.get(id).and_then(|t| t.get("allow_write")) {
+        Some(toml::Value::Boolean(b)) => *b,
+        _ => cfg.general.allow_write,
+    }
 }
 
 /// Deserialize a provider's settings table with a helpful error.
@@ -255,6 +297,25 @@ mod tests {
         let broken_ids: Vec<_> = broken.iter().map(|b| b.id.as_str()).collect();
         assert!(broken_ids.contains(&"wat"));
         assert!(broken_ids.contains(&"notion"));
+    }
+
+    #[test]
+    fn writes_are_off_unless_allowed() {
+        let cfg = Config::parse("[providers.todoist]\n[providers.ticktick]\n").unwrap();
+        assert!(!write_allowed(&cfg, "todoist"));
+        let cfg = Config::parse("[providers.todoist]\nallow_write = true\n[providers.ticktick]\n")
+            .unwrap();
+        assert!(write_allowed(&cfg, "todoist") && !write_allowed(&cfg, "ticktick"));
+        // `allow_write` doesn't trip the provider's unknown-field check.
+        let (ok, broken) = build_all(&cfg);
+        assert_eq!((ok.len(), broken.len()), (2, 0));
+        let cfg = Config::parse(
+            "[general]\nallow_write = true\n[providers.todoist]\n[providers.ticktick]\nallow_write = false\n",
+        )
+        .unwrap();
+        assert!(write_allowed(&cfg, "todoist") && !write_allowed(&cfg, "ticktick"));
+        let cfg = Config::parse("[providers.todoist]\nallow_write = \"yes\"\n").unwrap();
+        assert_eq!(build_all(&cfg).1.len(), 1);
     }
 
     #[test]

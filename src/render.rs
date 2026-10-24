@@ -289,7 +289,7 @@ fn day(s: &Snapshot, st: &Style, w: usize) -> Vec<String> {
             out.push(format!("    {}", msg.green()));
         }
         let shown: Vec<&Task> = s.tasks.iter().take(st.max_tasks).collect();
-        out.extend(task_rows(&shown, s, w));
+        out.extend(task_rows(&shown, s, w, &numbered(s, st.max_tasks)));
         if s.tasks.len() > st.max_tasks {
             out.push(format!(
                 "    {}",
@@ -382,6 +382,31 @@ fn day(s: &Snapshot, st: &Style, w: usize) -> Vec<String> {
     out
 }
 
+/// Can `daypeek done` complete this task? (It came from a provider with
+/// `allow_write = true`.)
+pub fn completable(s: &Snapshot, t: &Task) -> bool {
+    t.refs.iter().any(|r| s.writable.contains(&r.source))
+}
+
+/// The tasks that get a number on screen, in the order they're shown:
+/// `daypeek done <n>` completes `numbered(..)[n - 1]`. Empty unless a
+/// provider allows writes.
+pub fn numbered(s: &Snapshot, max_tasks: usize) -> Vec<&Task> {
+    if s.writable.is_empty() {
+        return Vec::new();
+    }
+    let shown: Vec<&Task> = match s.view {
+        View::Today | View::Tomorrow => s.tasks.iter().take(max_tasks).collect(),
+        View::Week => s
+            .view
+            .days(s.date.date)
+            .into_iter()
+            .flat_map(|d| tasks_on(s, d).into_iter().take(max_tasks))
+            .collect(),
+    };
+    shown.into_iter().filter(|t| completable(s, t)).collect()
+}
+
 /// Tasks that belong under `day` in the week view: today's block also holds
 /// overdue and undated tasks.
 fn tasks_on(s: &Snapshot, day: NaiveDate) -> Vec<&Task> {
@@ -418,6 +443,7 @@ fn week(s: &Snapshot, st: &Style, w: usize) -> Vec<String> {
     let right = format!("{} {}", clock(s.now, st.time_format), s.now.format("%Z"));
     let mut out = header(s, w, left, right);
     let weather = s.weather.as_ref().and_then(|ws| ws.data.as_ref());
+    let nums = numbered(s, st.max_tasks);
 
     for d in s.view.days(today) {
         out.push(String::new());
@@ -448,7 +474,7 @@ fn week(s: &Snapshot, st: &Style, w: usize) -> Vec<String> {
         }
         out.extend(event_rows(&events, d, d == today, s, st, w));
         let shown: Vec<&Task> = tasks.iter().take(st.max_tasks).copied().collect();
-        out.extend(task_rows(&shown, s, w));
+        out.extend(task_rows(&shown, s, w, &nums));
         if tasks.len() > st.max_tasks {
             out.push(format!(
                 "    {}",
@@ -672,7 +698,7 @@ fn due_label(t: &Task, today: NaiveDate) -> String {
     }
 }
 
-fn task_rows(tasks: &[&Task], s: &Snapshot, w: usize) -> Vec<String> {
+fn task_rows(tasks: &[&Task], s: &Snapshot, w: usize, nums: &[&Task]) -> Vec<String> {
     let today = s.date.date;
     let due_max = tasks
         .iter()
@@ -699,7 +725,13 @@ fn task_rows(tasks: &[&Task], s: &Snapshot, w: usize) -> Vec<String> {
             } else {
                 title.normal()
             };
-            let mut line = format!("    {} {} {}", dot, label, title);
+            // The number for `daypeek done` sits in the indent, so columns
+            // line up with or without numbers.
+            let indent = match nums.iter().position(|n| std::ptr::eq(*n, *t)) {
+                Some(i) => format!("{:>3} ", i + 1).cyan().to_string(),
+                None => "    ".to_string(),
+            };
+            let mut line = format!("{indent}{} {} {}", dot, label, title);
             if cols.due > 0 {
                 line.push_str(&format!(" {}", pad(&due_label(t, today), cols.due).red()));
             }

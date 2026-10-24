@@ -6,8 +6,8 @@ use serde::Deserialize;
 
 use super::{leading_date, settings, Ctx, Kind, Output, Provider};
 use crate::error::{Error, Result};
-use crate::http::enc;
-use crate::model::{Priority, Task};
+use crate::http::{enc, Http};
+use crate::model::{Priority, Task, TaskRef};
 use crate::secrets;
 
 pub const TOKEN_ENV: &str = "DAYPEEK_TODOIST_TOKEN";
@@ -57,6 +57,8 @@ pub struct Page {
 
 #[derive(Debug, Deserialize)]
 pub struct ApiTask {
+    #[serde(default)]
+    pub id: String,
     pub content: String,
     #[serde(default = "one")]
     pub priority: u8,
@@ -94,7 +96,8 @@ pub fn to_tasks(page: Page, source: &str) -> Vec<Task> {
                 t.content,
                 t.due.as_ref().and_then(|d| leading_date(&d.date)),
                 priority(t.priority),
-            );
+            )
+            .with_ref(source, &t.id, None);
             task.sources.push(source.to_string());
             task
         })
@@ -159,6 +162,26 @@ impl Provider for Todoist {
         }
         Ok(Output::tasks(tasks))
     }
+
+    fn can_complete(&self) -> bool {
+        true
+    }
+
+    /// `POST /api/v1/tasks/{id}/close`: done (recurring tasks move to their
+    /// next date, like in the app).
+    fn complete(&self, http: &Http, task: &TaskRef) -> Result<()> {
+        let token = self
+            .token()
+            .ok_or_else(|| Error::AuthMissing(self.hint()))?;
+        http.post_empty(
+            &format!(
+                "{}/api/v1/tasks/{}/close",
+                self.s.base_url.trim_end_matches('/'),
+                enc(&task.id)
+            ),
+            &format!("Bearer {token}"),
+        )
+    }
 }
 
 /// The Todoist filter for the current view. Your `filter` setting drives the
@@ -188,6 +211,33 @@ mod tests {
         assert_eq!(tasks[1].due, leading_date("2026-10-21"), "datetime due");
         assert_eq!(tasks[2].priority, Priority::None);
         assert_eq!(tasks[2].sources, vec!["todoist"]);
+        assert_eq!(tasks[0].refs[0].id, "6X7rM8997g3RQmvh");
+    }
+
+    #[test]
+    fn complete_closes_the_task() {
+        let server = crate::testserver::serve(|_| crate::testserver::Response::new(204, ""));
+        let p = Todoist {
+            id: "todoist".into(),
+            s: Settings {
+                token: Some("tok".into()),
+                token_env: "DAYPEEK_TEST_TODOIST_UNSET".into(),
+                base_url: server.url.clone(),
+                ..Settings::default()
+            },
+        };
+        assert!(p.can_complete());
+        let http = Http::new(std::time::Duration::from_secs(5));
+        let r = TaskRef {
+            source: "todoist".into(),
+            id: "6X7rM8997g3RQmvh".into(),
+            project: None,
+        };
+        p.complete(&http, &r).unwrap();
+        let req = &server.requests()[0];
+        assert_eq!(req.method, "POST");
+        assert_eq!(req.path, "/api/v1/tasks/6X7rM8997g3RQmvh/close");
+        assert_eq!(req.header("authorization"), Some("Bearer tok"));
     }
 
     #[test]

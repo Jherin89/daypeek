@@ -37,6 +37,10 @@ pub struct General {
     /// `daypeek --compact` in every new terminal is instant. 0 = always
     /// fetch. `--refresh` forces a fetch.
     pub cache_minutes: u64,
+    /// Let `daypeek done` complete tasks in every app that supports it
+    /// (Todoist, TickTick). Off by default: daypeek is read-only unless you
+    /// opt in here or per provider with `allow_write = true`.
+    pub allow_write: bool,
 }
 
 impl Default for General {
@@ -48,6 +52,7 @@ impl Default for General {
             cache_dir: None,
             max_tasks: 15,
             cache_minutes: 5,
+            allow_write: false,
         }
     }
 }
@@ -64,8 +69,97 @@ pub enum TimeFormat {
 #[serde(deny_unknown_fields)]
 pub struct CalendarSource {
     pub name: String,
-    /// `https://`, `webcal://`, `file://`, or a plain local path.
+    /// iCal: `https://`, `webcal://`, `file://`, or a plain local path.
+    /// CalDAV: the server (e.g. `https://caldav.icloud.com/`) or a calendar's
+    /// own address.
     pub url: String,
+    /// `"ical"` (default) or `"caldav"`.
+    #[serde(default, rename = "type")]
+    pub kind: CalendarKind,
+    /// CalDAV sign-in name (usually your email address).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub username: Option<String>,
+    /// CalDAV password in the config file. Discouraged: use the env var
+    /// (`password_env`) or the Keychain item `daypeek-<id>` instead.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub password: Option<String>,
+    /// Env var holding the CalDAV password [default: `DAYPEEK_<ID>_PASSWORD`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub password_env: Option<String>,
+    /// CalDAV: only these calendars (by name); empty = all of them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub calendars: Vec<String>,
+    /// Short id for the Keychain item and env var [default: from `name`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum CalendarKind {
+    #[default]
+    Ical,
+    Caldav,
+}
+
+impl CalendarSource {
+    /// A plain iCal feed.
+    pub fn ical(name: impl Into<String>, url: impl Into<String>) -> Self {
+        CalendarSource {
+            name: name.into(),
+            url: url.into(),
+            kind: CalendarKind::Ical,
+            username: None,
+            password: None,
+            password_env: None,
+            calendars: Vec::new(),
+            id: None,
+        }
+    }
+
+    pub fn is_caldav(&self) -> bool {
+        self.kind == CalendarKind::Caldav
+    }
+
+    /// `id`, or the name as a slug: "Work iCloud" → `work-icloud`. Used for
+    /// the Keychain item `daypeek-<id>`.
+    pub fn secret_id(&self) -> String {
+        match self.id.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+            Some(id) => id.to_string(),
+            None => slug(&self.name),
+        }
+    }
+
+    /// The env var checked first for the CalDAV password.
+    pub fn password_env(&self) -> String {
+        match &self.password_env {
+            Some(e) if !e.trim().is_empty() => e.trim().to_string(),
+            _ => default_password_env(&self.secret_id()),
+        }
+    }
+}
+
+/// `work-icloud` → `DAYPEEK_WORK_ICLOUD_PASSWORD`.
+pub fn default_password_env(id: &str) -> String {
+    format!("DAYPEEK_{}_PASSWORD", id.to_uppercase().replace('-', "_"))
+}
+
+/// Lowercase letters and digits, with `-` between words.
+pub fn slug(s: &str) -> String {
+    let mut out = String::new();
+    for c in s.chars() {
+        if c.is_ascii_alphanumeric() {
+            out.push(c.to_ascii_lowercase());
+        } else if !out.is_empty() && !out.ends_with('-') {
+            out.push('-');
+        }
+    }
+    let out = out.trim_end_matches('-').to_string();
+    if out.is_empty() {
+        "calendar".into()
+    } else {
+        out
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -184,6 +278,7 @@ pub const SAMPLE_CONFIG: &str = r#"# daypeek config. Everything below is comment
 # timeout_secs = 4                # per network request
 # max_tasks = 15
 # cache_minutes = 5               # reuse results this fresh (0 = always fetch)
+# allow_write = false             # true lets `daypeek done` complete tasks (Todoist, TickTick)
 
 # ── Calendars ─────────────────────────────────────────────────────────────
 # Any iCal (.ics) feed. For Google Calendar use the calendar's
@@ -195,6 +290,16 @@ pub const SAMPLE_CONFIG: &str = r#"# daypeek config. Everything below is comment
 # [[calendars]]
 # name = "Holidays"
 # url  = "webcal://example.com/holidays.ics"
+#
+# CalDAV (iCloud, Fastmail, Nextcloud, ...): sign in with an app password.
+# The password comes from $DAYPEEK_ICLOUD_PASSWORD or Keychain item
+# "daypeek-icloud" (the id is the name in lowercase), never this file.
+# [[calendars]]
+# name = "iCloud"
+# type = "caldav"
+# url  = "https://caldav.icloud.com/"
+# username = "you@icloud.com"
+# calendars = ["Home", "Work"]   # optional; empty = every calendar
 
 # ── Weather (Open-Meteo, no API key) ──────────────────────────────────────
 # [weather]
@@ -209,6 +314,7 @@ pub const SAMPLE_CONFIG: &str = r#"# daypeek config. Everything below is comment
 # [providers.todoist]             # token: Todoist → Settings → Integrations → Developer
 # # Read from $DAYPEEK_TODOIST_TOKEN or $TODOIST_API_TOKEN, or Keychain item "daypeek-todoist".
 # filter = "today | overdue"      # used by the today view
+# allow_write = true              # let `daypeek done` complete tasks here (off by default)
 
 # [providers.ticktick]            # $TICKTICK_ACCESS_TOKEN  (see `daypeek auth ticktick`)
 # projects = []                   # empty = inbox + all projects
@@ -231,6 +337,17 @@ pub const SAMPLE_CONFIG: &str = r#"# daypeek config. Everything below is comment
 # date_property = "Due"
 # done_property = "Done"
 # priority_property = "Priority"  # optional select
+
+# [providers.linear]              # $LINEAR_API_KEY or Keychain "daypeek-linear"
+# teams = []                      # team keys like "ENG"; empty = all teams
+# include_in_progress = true      # show started issues even without a due date
+
+# [providers.asana]               # $ASANA_TOKEN or Keychain "daypeek-asana"
+# workspace = "My Company"        # name or gid; empty = every workspace
+
+# [providers.trello]              # $TRELLO_API_KEY + $TRELLO_TOKEN (or Keychain)
+# mine_only = true                # cards assigned to you
+# boards = []                     # board names/ids; with mine_only = false, all cards on them
 
 # [providers.obsidian]
 # vault = "~/Documents/Obsidian/Main"
@@ -266,7 +383,12 @@ mod tests {
             .filter_map(|l| l.strip_prefix("# "))
             .filter(|l| l.starts_with('[') || l.contains(" = ") || l.contains("  = "))
             .filter(|l| {
-                !l.starts_with("[[calendars]]") && !l.starts_with("name") && !l.starts_with("url")
+                !l.starts_with("[[calendars]]")
+                    && !l.starts_with("name")
+                    && !l.starts_with("url")
+                    && !l.starts_with("type")
+                    && !l.starts_with("username")
+                    && !l.starts_with("calendars")
             })
             .collect::<Vec<_>>()
             .join("\n");
@@ -312,6 +434,42 @@ mod tests {
         assert_eq!(c.calendars.len(), 2);
         assert_eq!(c.weather().unwrap().units, Units::Metric);
         assert_eq!(c.providers["work-notes"]["type"].as_str(), Some("markdown"));
+    }
+
+    #[test]
+    fn caldav_calendars_and_secret_names() {
+        let c = Config::parse(
+            r#"
+            [[calendars]]
+            name = "Work iCloud"
+            type = "caldav"
+            url = "https://caldav.icloud.com/"
+            username = "me@icloud.com"
+            calendars = ["Work"]
+            [[calendars]]
+            name = "Fastmail"
+            type = "caldav"
+            url = "https://caldav.fastmail.com/"
+            username = "me@fastmail.com"
+            id = "fm"
+            password_env = "FM_PASS"
+            [[calendars]]
+            name = "Holidays"
+            url = "webcal://example.com/h.ics"
+            "#,
+        )
+        .unwrap();
+        let icloud = &c.calendars[0];
+        assert!(icloud.is_caldav() && !c.calendars[2].is_caldav());
+        assert_eq!(icloud.secret_id(), "work-icloud");
+        assert_eq!(icloud.password_env(), "DAYPEEK_WORK_ICLOUD_PASSWORD");
+        assert_eq!(c.calendars[1].secret_id(), "fm");
+        assert_eq!(c.calendars[1].password_env(), "FM_PASS");
+        assert_eq!(slug("  Mom's ⭐ cal "), "mom-s-cal");
+        assert_eq!(slug("!!"), "calendar");
+        assert!(
+            Config::parse("[[calendars]]\nname = \"x\"\nurl = \"y\"\ntype = \"exchange\"").is_err()
+        );
     }
 
     #[test]

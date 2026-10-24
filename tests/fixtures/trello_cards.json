@@ -1,0 +1,6 @@
+[
+  {"id": "c1", "name": "Update pricing page", "due": "2026-10-22T02:00:00.000Z", "dueComplete": false, "idBoard": "b1", "closed": false},
+  {"id": "c2", "name": "Schedule furnace service", "due": "2026-10-19T16:00:00.000Z", "dueComplete": false, "idBoard": "b2", "closed": false},
+  {"id": "c3", "name": "Brainstorm blog topics", "due": null, "dueComplete": false, "idBoard": "b1", "closed": false},
+  {"id": "c4", "name": "Send October newsletter", "due": "2026-10-20T15:00:00.000Z", "dueComplete": true, "idBoard": "b1", "closed": false}
+]

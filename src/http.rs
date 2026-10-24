@@ -16,6 +16,9 @@ const USER_AGENT: &str = concat!(
 #[derive(Clone)]
 pub struct Http {
     agent: ureq::Agent,
+    /// Same timeout, but redirects are returned instead of followed (CalDAV
+    /// follows them itself so PROPFIND/REPORT keep their method and body).
+    manual: ureq::Agent,
 }
 
 impl Http {
@@ -24,7 +27,12 @@ impl Http {
             .timeout(timeout)
             .user_agent(USER_AGENT)
             .build();
-        Http { agent }
+        let manual = ureq::AgentBuilder::new()
+            .timeout(timeout)
+            .user_agent(USER_AGENT)
+            .redirects(0)
+            .build();
+        Http { agent, manual }
     }
 
     pub fn get(&self, url: &str) -> ureq::Request {
@@ -35,13 +43,53 @@ impl Http {
         self.agent.post(url)
     }
 
+    /// Any method (`PROPFIND`, `REPORT`, ...), without following redirects.
+    pub fn request(&self, method: &str, url: &str) -> ureq::Request {
+        self.manual.request(method, url)
+    }
+
     /// GET and decode JSON, optionally with a bearer token.
     pub fn get_json<T: DeserializeOwned>(&self, url: &str, bearer: Option<&str>) -> Result<T> {
-        let mut req = self.get(url).set("Accept", "application/json");
-        if let Some(t) = bearer {
-            req = req.set("Authorization", &format!("Bearer {t}"));
+        match bearer {
+            Some(t) => self.get_json_auth(url, &format!("Bearer {t}")),
+            None => decode(self.get(url).set("Accept", "application/json").call()?),
         }
+    }
+
+    /// GET and decode JSON with a raw `Authorization` header value (Linear
+    /// keys have no `Bearer` prefix; Trello uses an `OAuth ...` header).
+    pub fn get_json_auth<T: DeserializeOwned>(&self, url: &str, auth: &str) -> Result<T> {
+        let req = self
+            .get(url)
+            .set("Accept", "application/json")
+            .set("Authorization", auth);
         decode(req.call()?)
+    }
+
+    /// POST a JSON body and decode the JSON reply.
+    pub fn post_json_auth<T: DeserializeOwned>(
+        &self,
+        url: &str,
+        auth: &str,
+        body: &serde_json::Value,
+    ) -> Result<T> {
+        let req = self
+            .post(url)
+            .set("Accept", "application/json")
+            .set("Authorization", auth);
+        decode(
+            req.set("Content-Type", "application/json")
+                .send_string(&body.to_string())?,
+        )
+    }
+
+    /// POST with no body, ignoring the reply (used to complete a task).
+    pub fn post_empty(&self, url: &str, auth: &str) -> Result<()> {
+        self.post(url)
+            .set("Authorization", auth)
+            .set("Content-Length", "0")
+            .call()?;
+        Ok(())
     }
 
     /// GET a text body (used for .ics feeds).

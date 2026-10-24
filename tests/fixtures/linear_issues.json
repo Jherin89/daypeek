@@ -1,0 +1,15 @@
+{
+  "data": {
+    "viewer": {
+      "assignedIssues": {
+        "nodes": [
+          {"id": "a1b2c3d4-0000-4000-8000-000000000142", "identifier": "ENG-142", "title": "Fix login redirect loop", "priority": 1, "dueDate": "2026-10-21", "state": {"type": "unstarted"}, "team": {"key": "ENG"}},
+          {"id": "a1b2c3d4-0000-4000-8000-000000000150", "identifier": "ENG-150", "title": "Ship onboarding checklist", "priority": 3, "dueDate": null, "state": {"type": "started"}, "team": {"key": "ENG"}},
+          {"id": "a1b2c3d4-0000-4000-8000-000000000161", "identifier": "ENG-161", "title": "Investigate flaky test", "priority": 0, "dueDate": null, "state": {"type": "backlog"}, "team": {"key": "ENG"}},
+          {"id": "a1b2c3d4-0000-4000-8000-000000000007", "identifier": "OPS-7", "title": "Rotate staging certificates", "priority": 4, "dueDate": "2026-10-24", "state": {"type": "unstarted"}, "team": {"key": "OPS"}}
+        ],
+        "pageInfo": {"hasNextPage": false, "endCursor": "c4"}
+      }
+    }
+  }
+}

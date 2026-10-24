@@ -52,6 +52,22 @@ pub struct Task {
     /// Project / list / file the task lives in, if known.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub context: Option<String>,
+    /// How to find this task again in each app that reported it (used by
+    /// `daypeek done`). Empty for apps daypeek only reads.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub refs: Vec<TaskRef>,
+}
+
+/// A task's id in one provider instance.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TaskRef {
+    /// Provider instance id (the `[providers.<id>]` key).
+    pub source: String,
+    /// The app's own task id.
+    pub id: String,
+    /// The project/list the app needs alongside the id (TickTick).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
 }
 
 impl Task {
@@ -62,6 +78,7 @@ impl Task {
             priority,
             sources: Vec::new(),
             context: None,
+            refs: Vec::new(),
         }
     }
 
@@ -69,6 +86,18 @@ impl Task {
         let c = ctx.into();
         if !c.is_empty() {
             self.context = Some(c);
+        }
+        self
+    }
+
+    /// Record that provider instance `source` reported this task as `id`.
+    pub fn with_ref(mut self, source: &str, id: &str, project: Option<&str>) -> Self {
+        if !id.is_empty() {
+            self.refs.push(TaskRef {
+                source: source.to_string(),
+                id: id.to_string(),
+                project: project.map(str::to_string),
+            });
         }
         self
     }

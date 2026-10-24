@@ -98,6 +98,13 @@ impl Cache {
         (young && same_day).then_some((at, data))
     }
 
+    /// Drop a cached value (after `daypeek done` changed it).
+    pub fn forget(&self, key: &str) {
+        if let Some(path) = self.path(key) {
+            let _ = fs::remove_file(path);
+        }
+    }
+
     /// Write a value; failures are ignored (the cache is best-effort).
     pub fn store<T: Serialize>(&self, key: &str, data: &T) {
         let Some(path) = self.path(key) else { return };
