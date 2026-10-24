@@ -22,5 +22,9 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+    ignore:
+      # `@1.85.1` is the MSRV toolchain to install, not the action's version;
+      # Dependabot would "bump" it to a Rust release that doesn't exist yet.
+      - dependency-name: dtolnay/rust-toolchain
     commit-message:
       prefix: ci
