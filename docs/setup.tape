@@ -6,7 +6,7 @@ Set Shell "bash"
 Set FontFamily "JetBrains Mono"
 Set FontSize 14
 Set Width 900
-Set Height 1080
+Set Height 1300
 Set Padding 18
 Set Theme "Catppuccin Mocha"
 Set TypingSpeed 40ms
@@ -36,12 +36,37 @@ Enter
 Sleep 300ms
 Enter
 Sleep 600ms
-# 2/4: one calendar
+# 2/4: an iCal link…
+Enter
+Sleep 500ms
 Type "https://calendar.google.com/calendar/ical/demo/basic.ics"
 Enter
 Sleep 400ms
 Enter
+Sleep 600ms
+# …and an iCloud account over CalDAV (fake app password; demo calendars)
+Up
 Sleep 400ms
+Enter
+Sleep 600ms
+Enter
+Sleep 900ms
+Enter
+Sleep 400ms
+Type "you@icloud.com"
+Enter
+Sleep 500ms
+Type "abcd-efgh-ijkl-mnop"
+Enter
+Sleep 900ms
+Down
+Sleep 300ms
+Down
+Sleep 300ms
+Space
+Sleep 500ms
+Enter
+Sleep 600ms
 Enter
 Sleep 600ms
 # 3/4: weather (suggested from the time zone; type your own to change it)

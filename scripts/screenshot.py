@@ -32,6 +32,12 @@ SHOTS = {
     "screenshot-light":     ("daypeek", ["--demo"], "light"),
     "screenshot-offline":   ("daypeek   # wifi off", ["--demo", "--demo-offline"], "dark"),
     "screenshot-providers": ("daypeek providers", ["--demo", "providers"], "dark"),
+    # Task numbers appear only with allow_write; `done` here is the demo (nothing changes).
+    "screenshot-done":      ("daypeek   # with allow_write = true for Todoist and TickTick",
+                             "{bin} --demo --demo-write --color always --at {at} | sed -n '/TASKS/,/^$/p';"
+                             " printf '\\033[32m❯\\033[0m daypeek done 2 --yes\\n';"
+                             " {bin} --demo --color always --at {at} done 2 --yes",
+                             "dark"),
     "screenshot-json":      ("daypeek --json | jq '{weather: .weather.data.condition, top: .tasks[:2]}'",
                              "{bin} --demo --json --at {at} | jq -C '{{weather: .weather.data.condition, top: .tasks[:2]}}'",
                              "dark"),
