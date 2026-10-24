@@ -3,7 +3,7 @@
 # daypeek
 
 **Your whole day at a glance, right in your terminal.**<br>
-Calendar, tasks from 10 apps, and weather in one read-only command that prints in milliseconds.
+Calendar, tasks from 13 apps, and weather in one command that prints in milliseconds. Read-only unless you say otherwise.
 
 [![CI](https://github.com/Jherin89/daypeek/actions/workflows/ci.yml/badge.svg)](https://github.com/Jherin89/daypeek/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -57,13 +57,15 @@ echo 'daypeek --compact' >> ~/.zshrc      # bash: ~/.bashrc · fish: see docs/SE
 
 ## What you get
 
-- 📅 **Today's calendar** from any iCal link (Google, iCloud, Outlook…), with recurring and all-day events
+- 📅 **Today's calendar** from any iCal link (Google, Outlook…) or a CalDAV account (iCloud, Fastmail, Nextcloud), with recurring and all-day events
 - 🗓 **Tomorrow and the week ahead** with `daypeek tomorrow` and `daypeek week`, including the daily forecast
-- ✅ **Tasks from 10 apps, merged**, with duplicates folded together, p1–p4 priorities, and a badge showing where each task came from
+- ✅ **Tasks from 13 apps, merged**, including Linear, Asana and Trello, with duplicates folded together, p1–p4 priorities, and a badge showing where each task came from
+- 📺 **`--watch`** keeps it open on a spare screen and redraws in place (`q` quits)
+- ☑️ **`daypeek done 3`** ticks off task 3 in Todoist or TickTick, *only* if you turn on `allow_write`; otherwise daypeek never changes anything
 - ⛅ **Weather** from Open-Meteo, no API key needed
 - ⚡ **Instant and offline-friendly.** Results from the last few minutes are reused (`--refresh` fetches now), and when you're offline the last good data is shown and clearly marked.
 - 🍎 **Zero setup on a Mac** for Things 3 and Obsidian: with no config at all, daypeek finds them and shows your tasks.
-- 🔒 **Private.** Read-only, no telemetry, and tokens only go to each app's own API.
+- 🔒 **Private.** Read-only by default, no telemetry, and tokens only go to each app's own API.
 
 ## Screenshots
 
@@ -71,8 +73,9 @@ echo 'daypeek --compact' >> ~/.zshrc      # bash: ~/.bashrc · fish: see docs/SE
 | :---: | :---: |
 | <img src="docs/screenshot-week.png" alt="daypeek week: seven day blocks with events, tasks, and each day's forecast" width="420"><br>**`daypeek week`**: the next seven days | <img src="docs/screenshot-tomorrow.png" alt="daypeek tomorrow: tomorrow's events, tasks due tomorrow, and the forecast" width="420"><br>**`daypeek tomorrow`**: plan ahead |
 | <img src="docs/screenshot-setup.png" alt="The daypeek setup wizard: pick apps, paste a hidden token, add a calendar and a city, then a health check" width="420"><br>**`daypeek setup`**: guided setup in four steps | <img src="docs/screenshot-compact.png" alt="daypeek --compact: a three-line summary" width="420"><br>**`--compact`**: three lines for your shell startup |
-| <img src="docs/screenshot-providers.png" alt="daypeek providers: a health check per source" width="420"><br>**`daypeek providers`**: is everything connected? | <img src="docs/screenshot-json.png" alt="daypeek --json piped to jq" width="420"><br>**`--json`**: for scripts, status bars, and `jq` |
+| <img src="docs/screenshot-providers.png" alt="daypeek providers: a health check per source, including Linear, Asana, Trello and an iCloud CalDAV calendar" width="420"><br>**`daypeek providers`**: is everything connected? | <img src="docs/screenshot-json.png" alt="daypeek --json piped to jq" width="420"><br>**`--json`**: for scripts, status bars, and `jq` |
 | <img src="docs/screenshot-offline.png" alt="Offline: every cloud source shows its cached data, marked stale" width="420"><br>**Offline**: last good data, clearly marked | <img src="docs/screenshot-light.png" alt="daypeek in a light terminal theme" width="420"><br>**Light themes** look good too |
+| <img src="docs/watch.gif" alt="daypeek --watch redrawing the dashboard in place, with a footer showing the update time and the q and r keys" width="420"><br>**`--watch`**: a live dashboard for a spare screen | <img src="docs/screenshot-done.png" alt="With allow_write on, tasks are numbered and daypeek done 2 completes one after asking" width="420"><br>**`daypeek done 2`**: opt-in, asks first |
 
 <sub>Every screenshot uses <code>daypeek --demo</code> fake data.</sub>
 
@@ -176,6 +179,60 @@ done_property  = "Done"
 </details>
 
 <details>
+<summary><b>Linear</b>: a personal API key</summary>
+
+Linear → **Settings → Security & access → Personal API keys → New API key** (read access is enough), then:
+
+```sh
+export LINEAR_API_KEY='lin_api_…'     # or Keychain: daypeek-linear
+```
+
+```toml
+[providers.linear]
+# teams = ["ENG"]     # optional
+```
+
+Shows open issues assigned to you that are due, plus ones in progress. [Full Linear guide →](docs/SETUP.md#linear)
+
+</details>
+
+<details>
+<summary><b>Asana</b>: a personal access token</summary>
+
+Asana's [developer console](https://app.asana.com/0/my-apps) → **Create new token**, then:
+
+```sh
+export ASANA_TOKEN='…'     # or Keychain: daypeek-asana
+```
+
+```toml
+[providers.asana]
+# workspace = "My Company"     # optional; default = every workspace
+```
+
+[Full Asana guide →](docs/SETUP.md#asana)
+
+</details>
+
+<details>
+<summary><b>Trello</b>: an API key and a token</summary>
+
+Create a Power-Up at [trello.com/power-ups/admin](https://trello.com/power-ups/admin) → **API key** → click **Token** → **Allow**, then:
+
+```sh
+export TRELLO_API_KEY='…'  TRELLO_TOKEN='…'   # or Keychain: daypeek-trello-api-key, daypeek-trello
+```
+
+```toml
+[providers.trello]
+# boards = ["Side projects"]   # optional; default = cards assigned to you
+```
+
+[Full Trello guide →](docs/SETUP.md#trello)
+
+</details>
+
+<details>
 <summary><b>Things 3</b> (macOS): nothing to set up</summary>
 
 ```toml
@@ -217,30 +274,40 @@ Understands Obsidian Tasks `📅 2026-10-21`, Dataview `[due:: …]`, and todo.t
 </details>
 
 <details>
-<summary><b>Calendars</b> (Google, iCloud, Outlook, any .ics) and <b>weather</b></summary>
+<summary><b>Calendars</b> (Google, Outlook, any .ics, or CalDAV: iCloud, Fastmail, Nextcloud) and <b>weather</b></summary>
 
 ```toml
 [[calendars]]
 name = "Personal"
 url  = "https://calendar.google.com/calendar/ical/…/basic.ics"   # "Secret address in iCal format"
 
+[[calendars]]
+name     = "iCloud"
+type     = "caldav"
+url      = "https://caldav.icloud.com/"
+username = "you@icloud.com"        # app-specific password: $DAYPEEK_ICLOUD_PASSWORD or Keychain daypeek-icloud
+
 [weather]
 city  = "Evans, Georgia"
 units = "imperial"
 ```
 
-Where to find each calendar's link: [Calendars guide →](docs/SETUP.md#calendars)
+Where to find each calendar's link: [Calendars guide →](docs/SETUP.md#calendars) · CalDAV step by step: [iCloud, Fastmail, Nextcloud →](docs/SETUP.md#caldav-icloud-fastmail-nextcloud)
 
 </details>
 
 | App | Status | | App | Status |
 | --- | --- | --- | --- | --- |
-| Todoist | ✅ v1 | | Things 3 (macOS) | ✅ v1 |
-| TickTick | ✅ v1 | | Apple Reminders (macOS) | ✅ v1 |
-| Microsoft To Do | ✅ v1 | | Obsidian | ✅ v1 |
-| Google Tasks | ✅ v1 | | todo.txt | ✅ v1 |
-| Notion | ✅ v1 | | Markdown | ✅ v1 |
-| Asana, Trello, Linear | 🗺 planned | | ClickUp, Logseq, Bear | 🗺 planned |
+| Todoist | ✅ read · ☑️ `done` | | Trello | ✅ read |
+| TickTick | ✅ read · ☑️ `done` | | Things 3 (macOS) | ✅ read |
+| Microsoft To Do | ✅ read | | Apple Reminders (macOS) | ✅ read |
+| Google Tasks | ✅ read | | Obsidian | ✅ read |
+| Notion | ✅ read | | todo.txt | ✅ read |
+| Linear | ✅ read | | Markdown | ✅ read |
+| Asana | ✅ read | | ClickUp, Logseq, Bear | 🗺 planned |
+| Calendars: iCal links, CalDAV (iCloud, Fastmail, Nextcloud) | ✅ read | | | |
+
+☑️ `daypeek done` works only after you set `allow_write = true` ([how](docs/USAGE.md#completing-tasks)).
 
 Missing one? [Request it](https://github.com/Jherin89/daypeek/issues/new?template=new_provider.yml), or [add it](CONTRIBUTING.md): each provider is a single file.
 

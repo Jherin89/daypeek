@@ -6,6 +6,44 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Linear, Asana and Trello.** Linear shows open issues assigned to you that
+  are due, plus ones in progress (GraphQL, personal API key in
+  `$LINEAR_API_KEY`). Asana shows your incomplete tasks across your workspaces
+  (personal access token in `$ASANA_TOKEN`). Trello shows due cards assigned to
+  you, or every due card on chosen `boards` (API key + token in
+  `$TRELLO_API_KEY` / `$TRELLO_TOKEN`, sent in a header, never in a URL). Each
+  also reads the Keychain or the config, is in `daypeek setup`, and has a
+  step-by-step guide.
+- **CalDAV calendars** (`type = "caldav"`): sign in to iCloud, Fastmail,
+  Nextcloud or any CalDAV server with an app password and see private
+  calendars without publishing a link. daypeek discovers your calendars
+  (`current-user-principal` → `calendar-home-set`, or `/.well-known/caldav`),
+  fetches only the needed date range with a `calendar-query` REPORT, and uses
+  the same recurrence and time-zone handling as iCal links. The password comes
+  from `$DAYPEEK_<NAME>_PASSWORD`, the Keychain item `daypeek-<name>`, or the
+  config; it's never sent to another host after a redirect. `daypeek setup`
+  offers iCloud, Fastmail and Nextcloud presets and lets you pick calendars.
+- **`--watch`** keeps the dashboard open and redraws it in place every
+  `--every <secs>` (default 60) and on resize, on the alternate screen. `q`,
+  `Esc` or `Ctrl-C` quits and restores the terminal; `r` fetches everything
+  now. Cloud results are reused for `cache_minutes` (at least a minute) between
+  redraws. Works with `today`, `tomorrow`, `week` and `--compact`.
+- **`daypeek done <n>`** (opt-in): with `allow_write = true` for an app (or
+  under `[general]`), tasks from Todoist and TickTick get numbers and
+  `daypeek done 2` completes that task after asking (`--yes` skips the
+  question). The numbers match what was last on screen. Without
+  `allow_write`, daypeek stays read-only and `done` explains how to opt in.
+  TickTick needs `daypeek auth ticktick` again to grant `tasks:write`.
+- Dependabot keeps Cargo dependencies and GitHub Actions up to date weekly, and
+  CI runs `cargo audit` on every push and every Monday.
+
+### Changed
+
+- Dependency updates: `tinystr` 0.8.5, `yoke` 0.8.4, `zerovec` 0.11.9,
+  `zerovec-derive` 0.11.7.
+
 ## [0.2.0] - 2026-10-21
 
 ### Added

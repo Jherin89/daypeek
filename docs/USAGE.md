@@ -2,7 +2,8 @@
 
 - [Commands at a glance](#commands-at-a-glance)
 - [Flags](#flags)
-- [Subcommands](#subcommands): [`tomorrow` and `week`](#daypeek-tomorrow-and-daypeek-week) · [`setup`](#daypeek-setup) · [`providers`](#daypeek-providers) · [`auth`](#daypeek-auth)
+- [Subcommands](#subcommands): [`tomorrow` and `week`](#daypeek-tomorrow-and-daypeek-week) · [`--watch`](#--watch-a-live-dashboard) · [`done`](#daypeek-done) · [`setup`](#daypeek-setup) · [`providers`](#daypeek-providers) · [`auth`](#daypeek-auth)
+- [Completing tasks](#completing-tasks) (opt-in; read-only is the default)
 - [Caching: why it's instant](#caching-why-its-instant)
 - [Reading the dashboard](#reading-the-dashboard)
 - [JSON output and `jq`](#json-output-and-jq)
@@ -24,6 +25,8 @@ daypeek --json                # everything as JSON
 daypeek --refresh             # fetch everything now (skip the 5-minute reuse)
 daypeek --offline             # cached data only, no network
 daypeek --demo                # fake data (works without a config)
+daypeek --watch               # stay open and redraw in place (q quits)
+daypeek done 3                # complete task 3 (only with allow_write = true)
 daypeek setup                 # guided first-run setup (wizard)
 daypeek providers             # health check for every configured source
 daypeek auth <provider>       # one-time OAuth sign-in: ticktick, mstodo, gtasks
@@ -38,6 +41,8 @@ daypeek --init                # write a starter config
 | `--json` | Prints the full snapshot as JSON on stdout (see [below](#json-output-and-jq)). There's no color and no task limit. |
 | `--demo` | Uses built-in fake data. Reads no config and makes no network calls. Combine it with `--compact`, `--json`, `tomorrow`, `week`, `providers`, or `setup`. |
 | `--refresh` | Fetches every source now instead of reusing results from the last `cache_minutes` ([caching](#caching-why-its-instant)). |
+| `--watch` | Keeps the dashboard open and redraws it in place ([details](#--watch-a-live-dashboard)). Works with `today`, `tomorrow`, `week` and `--compact`; not with `--json`. |
+| `--every <SECS>` | With `--watch`: seconds between redraws (default 60, minimum 2). |
 | `--offline` | Skips every network source and shows the last cached data, marked stale. Local sources (Things, Obsidian, files) are still read live. |
 | `--init` | Writes a sample config to `~/.config/daypeek/config.toml` (or the `--config` path). Everything in it is commented out, and the file is readable only by you (`0600`). |
 | `--force` | With `--init`, overwrites an existing config (keeping a `.bak`). |
@@ -83,6 +88,46 @@ today view. Things includes to-dos scheduled or due in the range. Google Tasks,
 Notion and Apple Reminders ask for tasks due through the last day, and the
 file-based apps are filtered locally.
 
+### `--watch`: a live dashboard
+
+```sh
+daypeek --watch               # today, redrawn every minute
+daypeek week --watch          # the week view
+daypeek --watch --every 10    # redraw every 10 seconds
+daypeek --watch --compact     # the short summary, big and live
+```
+
+`--watch` takes over the terminal window like `top` or `less` does: it
+switches to the alternate screen, redraws the dashboard in place every
+`--every` seconds (and whenever you resize the window), and puts your terminal
+back exactly as it was when you leave.
+
+| Key | Does |
+| --- | --- |
+| `q`, `Esc`, `Ctrl-C` | Quit |
+| `r` | Fetch everything now, ignoring the cache |
+
+The footer shows when it last updated. Every redraw uses the current time, so
+the *now* and *next* markers move along. Cloud sources are **not** fetched on
+every redraw: results are reused for your `cache_minutes` (at least one minute,
+even if `cache_minutes = 0`), so `--every 5` redraws the clock without calling
+every API every five seconds. Local sources (Things, Obsidian, files) are read
+fresh each time. Just after midnight it switches to the new day by itself.
+
+`--watch` needs a real terminal: piped or scripted, it exits with an error
+(and it can't be combined with `--json`). `--every` without `--watch` is an
+error.
+
+### `daypeek done`
+
+```sh
+daypeek done 3                # complete task 3 (asks first)
+daypeek done 3 --yes          # don't ask
+```
+
+Completes a task in the app it came from. **Off by default**: see
+[Completing tasks](#completing-tasks).
+
 ### `daypeek setup`
 
 ```sh
@@ -94,7 +139,7 @@ An interactive wizard that asks for:
 
 1. Your apps (multi-select: Space ticks, Enter continues). On macOS, Things 3 and your most recent Obsidian vault are pre-ticked when they're found.
 2. Each app's credential, typed hidden. On macOS it goes into the Keychain; on Linux you're shown the env var to set.
-3. Your calendars' iCal URLs.
+3. Your calendars: iCal links, or a CalDAV account (iCloud, Fastmail, Nextcloud, or another server). For CalDAV it asks for your username and app password (hidden, into the Keychain), looks up your calendars, and lets you untick the ones you don't want.
 4. A city for weather, suggested from your time zone (type `none` to skip).
 
 It then writes the config (mode `0600`, keeping a `.bak` of any old one) and
@@ -152,6 +197,64 @@ and Notion don't need it: they use a personal API token, and
 
 Use `--port` if 8765 is taken, and update the redirect URL in the app
 registration to match. Microsoft ignores the port on `localhost`, so it needs no change.
+
+## Completing tasks
+
+daypeek is **read-only by default**: out of the box it never creates, changes
+or completes anything in any app, and `daypeek done` just explains how to turn
+it on.
+
+To let it complete tasks, opt in per app (or for every app that supports it):
+
+```toml
+[providers.todoist]
+allow_write = true
+
+[providers.ticktick]
+client_id = "…"
+allow_write = true
+
+# or, for every app that supports it:
+# [general]
+# allow_write = true
+```
+
+An app's own `allow_write` wins over the `[general]` one, so
+`allow_write = false` under an app keeps it read-only even when the global one
+is on. Today two apps support it:
+
+| App | What `done` does |
+| --- | --- |
+| Todoist | Closes the task, the same as ticking it in Todoist (a recurring task moves to its next date). Your existing API token already allows this. |
+| TickTick | Marks the task complete. **Run `daypeek auth ticktick` once more** after turning on `allow_write`: it asks TickTick for write permission (`tasks:write`), which the read-only sign-in didn't include. |
+
+Other apps (Linear, Asana, Trello, Notion, files…) stay read-only.
+
+**How it works:**
+
+1. With `allow_write` on, the dashboard shows a number next to each task from
+   an app that allows writes:
+
+   ```
+   Tasks
+       1 ● Submit expense report         p1  todoist
+       2 ● Call the dentist                  ticktick
+         ● Review PR #142                p2  linear
+   ```
+
+2. `daypeek done 2` completes the task numbered **2 the last time the dashboard
+   was drawn**, so the number always matches what you saw (even if a task was
+   added since). The numbers last until midnight; otherwise, or if you haven't
+   run `daypeek` yet, it fetches fresh and uses those numbers.
+3. It shows the task and asks `Complete "Call the dentist" in TickTick? [y/N]`.
+   `--yes` (`-y`) skips the question; without a terminal you must pass `--yes`.
+4. If the same task appears in two writable apps (duplicates are merged on the
+   dashboard), it's completed in both. A read-only copy is only mentioned.
+5. The app's cached results are cleared, so the next `daypeek` shows the task
+   gone. The other numbers stay the same until the dashboard is redrawn.
+
+`daypeek done` needs the network, so it refuses `--offline`.
+`daypeek --demo done 2` shows what would happen with the demo data.
 
 ## Caching: why it's instant
 
@@ -257,11 +360,15 @@ daypeek week --json | jq '.tasks | length'
 | `MSTODO_REFRESH_TOKEN` or `MSTODO_ACCESS_TOKEN` | Microsoft To Do |
 | `GTASKS_CLIENT_SECRET` + `GTASKS_REFRESH_TOKEN`, or `GTASKS_ACCESS_TOKEN` | Google Tasks |
 | `NOTION_TOKEN` | Notion API token |
+| `LINEAR_API_KEY` | Linear personal API key |
+| `ASANA_TOKEN` | Asana personal access token |
+| `TRELLO_API_KEY` + `TRELLO_TOKEN` | Trello API key and token |
+| `DAYPEEK_<NAME>_PASSWORD` | A CalDAV calendar's app password (`iCloud` → `DAYPEEK_ICLOUD_PASSWORD`; change with `password_env`) |
 | `NO_COLOR` | Disables color (`--color auto`) |
 | `XDG_CONFIG_HOME`, `XDG_CACHE_HOME` | Base directories, if set |
 
 Any provider's env var name can be changed with `token_env` (or
-`access_token_env`, `refresh_token_env`, `client_secret_env`) in its config block.
+`access_token_env`, `refresh_token_env`, `client_secret_env`, `key_env`) in its config block.
 Each one can also come from the macOS Keychain item `daypeek-<id>` or
 `daypeek-<id>-<name>` (for example `daypeek-gtasks-refresh-token`).
 
@@ -359,13 +466,18 @@ there, but there are no promises yet.
 
 ## Privacy
 
-- **Read-only.** Every provider only reads. Nothing in your apps is ever created,
-  changed, or deleted.
+- **Read-only by default.** Out of the box every provider only reads, and nothing
+  in your apps is ever created, changed, or deleted. The one exception is
+  `daypeek done`, and only after you set `allow_write = true`: it completes the
+  single task you picked (after asking), in Todoist or TickTick
+  ([details](#completing-tasks)).
 - **Tokens** come from env vars, the macOS Keychain, or your config file. Each
   one is sent only to that app's own API over HTTPS (Todoist → `api.todoist.com`,
   TickTick → `api.ticktick.com`, Microsoft → `graph.microsoft.com` /
   `login.microsoftonline.com`, Google → `tasks.googleapis.com` /
-  `oauth2.googleapis.com`, Notion → `api.notion.com`). They're never logged,
+  `oauth2.googleapis.com`, Notion → `api.notion.com`, Linear → `api.linear.app`,
+  Asana → `app.asana.com`, Trello → `api.trello.com`, CalDAV passwords → only
+  the server you configured, never to another site after a redirect). They're never logged,
   cached, or printed, except by `daypeek auth`, which prints the token once so
   you can store it.
 - **Other network calls:** your calendar URLs, and Open-Meteo

@@ -20,10 +20,11 @@ need the sections for apps you actually use.
 - [3. Run the setup wizard](#3-run-the-setup-wizard) (recommended), or [write the config by hand](#or-write-the-config-by-hand)
 - [4. Connect your apps manually](#4-connect-your-apps) (what the wizard does, step by step)
   - [Credentials: env vars or the macOS Keychain](#credentials)
-  - Cloud: [Todoist](#todoist) · [TickTick](#ticktick) · [Microsoft To Do](#microsoft-to-do) · [Google Tasks](#google-tasks) · [Notion](#notion)
+  - Cloud: [Todoist](#todoist) · [TickTick](#ticktick) · [Microsoft To Do](#microsoft-to-do) · [Google Tasks](#google-tasks) · [Notion](#notion) · [Linear](#linear) · [Asana](#asana) · [Trello](#trello)
   - macOS: [Things 3](#things-3) · [Apple Reminders](#apple-reminders)
   - Local files: [Obsidian](#obsidian) · [todo.txt](#todotxt) · [Markdown](#markdown)
   - [Calendars](#calendars): Google · iCloud · Outlook · any `.ics`
+  - [CalDAV accounts](#caldav-icloud-fastmail-nextcloud): iCloud · Fastmail · Nextcloud · others
   - [Weather](#weather)
 - [5. Run it when a terminal opens](#5-run-it-when-a-terminal-opens)
 - [Next: usage reference and troubleshooting](USAGE.md)
@@ -491,6 +492,111 @@ Google Tasks has no priorities, so these tasks show without one.
 
 5. ✅ `daypeek providers` → `notion  ✓ ok`.
 
+### Linear
+
+daypeek shows open issues **assigned to you** that are due (or overdue), plus
+issues you've started even if they have no due date.
+
+1. In Linear, open **Settings** (press `G` then `S`, or click your workspace
+   name → **Settings**) → under *Account* choose **Security & access**.
+2. Under **Personal API keys**, click **New API key**. Give it a name like
+   `daypeek`. **Read** access is all daypeek needs; you can also limit it to
+   certain teams. Click **Create**.
+   ([Linear: API and webhooks](https://linear.app/docs/api-and-webhooks))
+3. Copy the key (it starts with `lin_api_`). Linear shows it only once.
+4. Store it:
+
+   ```sh
+   export LINEAR_API_KEY='lin_api_…'                      # e.g. in ~/.zshrc
+   # or, macOS Keychain:
+   security add-generic-password -s daypeek-linear -a "$USER" -w
+   ```
+
+5. Config:
+
+   ```toml
+   [providers.linear]
+   # teams = ["ENG", "OPS"]          # team keys (the letters in ENG-123); empty = all
+   # include_in_progress = true      # started issues show even with no due date
+   # include_undated = false         # true = every open issue assigned to you
+   ```
+
+6. ✅ `daypeek providers` → `linear  ✓ ok N tasks due`.
+
+Titles look like `ENG-42 Fix the login bug`, with the team as the context.
+Linear's Urgent/High/Medium/Low become p1–p4.
+
+### Asana
+
+daypeek shows your **incomplete tasks assigned to you** that are due today or
+earlier (or in the week, for `daypeek week`).
+
+1. Open the Asana developer console at
+   [app.asana.com/0/my-apps](https://app.asana.com/0/my-apps). (From Asana:
+   your profile photo → **Settings** → **Apps** → **View developer console**.)
+2. Click **+ Create new token**, name it `daypeek`, accept the terms, and click
+   **Create token**. Copy it right away; Asana shows it only once.
+   ([Asana: personal access token](https://developers.asana.com/docs/personal-access-token))
+3. Store it:
+
+   ```sh
+   export ASANA_TOKEN='…'
+   # or: security add-generic-password -s daypeek-asana -a "$USER" -w
+   ```
+
+4. Config:
+
+   ```toml
+   [providers.asana]
+   # workspace = "My Company"   # name or ID; leave out to read every workspace you're in
+   # include_undated = false    # true = also tasks with no due date
+   ```
+
+5. ✅ `daypeek providers` → `asana  ✓ ok`. If `workspace` doesn't match, the
+   error lists the names of your workspaces.
+
+Asana has no standard priority field, so these tasks show without one. The
+task's first project is shown as its context.
+
+### Trello
+
+Trello needs two values: an **API key** (which identifies "your app") and a
+**token** (which lets that key read your boards).
+
+1. Go to [trello.com/power-ups/admin](https://trello.com/power-ups/admin) and
+   click **New**. Fill in a name (`daypeek`), pick your workspace, and enter
+   your email; the *Iframe connector URL* can be left empty. Click **Create**.
+2. On the Power-Up's page, open **API key** → **Generate a new API key**. Copy
+   the **API key**. (You don't need the *secret*; daypeek never uses it.)
+3. Next to the key, click the **Token** link. Trello asks to let the app read
+   your account: click **Allow**, and copy the token it shows.
+   ([Trello: REST API introduction](https://developer.atlassian.com/cloud/trello/guides/rest-api/api-introduction/))
+4. Store both:
+
+   ```sh
+   export TRELLO_API_KEY='…'
+   export TRELLO_TOKEN='…'
+   # or, macOS Keychain:
+   security add-generic-password -s daypeek-trello-api-key -a "$USER" -w
+   security add-generic-password -s daypeek-trello -a "$USER" -w
+   ```
+
+5. Config. By default you see open cards **assigned to you** (you're a member
+   of the card) that are due:
+
+   ```toml
+   [providers.trello]
+   # boards = ["Side projects"]   # only these boards (names or IDs)
+   # mine_only = true             # false = every due card on `boards`, not just yours
+   # include_undated = false      # true = also cards with no due date
+   ```
+
+6. ✅ `daypeek providers` → `trello  ✓ ok`.
+
+Cards with a completed due date are skipped. The board's name is the context.
+The key and token are sent in a request header, never in a URL, so they don't
+show up in error messages.
+
 ### Things 3
 
 macOS only. Nothing to set up: `daypeek` opens Things' local database
@@ -635,6 +741,95 @@ publishing off.
 via link), sports schedules, or holiday feeds.
 
 ✅ `daypeek providers` → `Personal  iCal calendar  ✓ ok N events today`.
+
+### CalDAV (iCloud, Fastmail, Nextcloud)
+
+CalDAV signs in to your calendar account directly, so you see **private**
+calendars without publishing a link. You need three things: the server's
+address, your username, and an **app password** (a separate password just for
+daypeek that you can revoke any time; your normal password won't work when
+two-factor sign-in is on).
+
+`daypeek setup` asks for these and lets you pick calendars from a list. To do
+it by hand:
+
+```toml
+[[calendars]]
+name      = "iCloud"
+type      = "caldav"
+url       = "https://caldav.icloud.com/"
+username  = "you@icloud.com"
+# calendars = ["Home", "Work"]   # optional; leave out to show every calendar
+```
+
+The password is looked up like any other secret, and never belongs in the
+config file:
+
+1. the env var `DAYPEEK_<NAME>_PASSWORD`, where `<NAME>` is the calendar's
+   `name` in capitals with `_` between words (`iCloud` → `DAYPEEK_ICLOUD_PASSWORD`,
+   `Work Fastmail` → `DAYPEEK_WORK_FASTMAIL_PASSWORD`), or `password_env = "…"`
+   to pick your own name;
+2. the Keychain item `daypeek-<name>` in lowercase with `-` between words
+   (`daypeek-icloud`, `daypeek-work-fastmail`), or `daypeek-<id>` if you set
+   `id = "…"`;
+3. `password = "…"` in the config (works, but not recommended).
+
+daypeek finds your calendars automatically (it asks the server for your
+*principal* and *calendar home*), then fetches just the events from yesterday
+to a week from now. Only calendars that hold events are used; reminders/task
+lists are skipped. If a name in `calendars` doesn't match, the error lists the
+names it found.
+
+#### iCloud
+
+1. Your Apple Account needs two-factor authentication (most already have it).
+2. Go to [account.apple.com](https://account.apple.com) and sign in.
+3. Open **Sign-In and Security** → **App-Specific Passwords** → click **+**
+   (or *Generate an app-specific password*).
+4. Name it `daypeek` and click **Create**. Copy the password
+   (`abcd-efgh-ijkl-mnop`). ([Apple: app-specific passwords](https://support.apple.com/en-us/102654))
+5. Store it:
+
+   ```sh
+   export DAYPEEK_ICLOUD_PASSWORD='abcd-efgh-ijkl-mnop'
+   # or: security add-generic-password -s daypeek-icloud -a "$USER" -w
+   ```
+
+6. Config: `url = "https://caldav.icloud.com/"` and `username` = your Apple
+   Account email.
+
+#### Fastmail
+
+1. In Fastmail, open **Settings** → **Privacy & Security** → **Manage app
+   passwords and access** (under *Connected apps & API tokens*).
+2. Click **New app password**, name it `daypeek`, and choose access that
+   includes **Calendars (CalDAV)**. Click **Generate password** and copy it.
+   ([Fastmail: app passwords](https://www.fastmail.help/hc/en-us/articles/360058752854-App-passwords).
+   CalDAV isn't included on Fastmail's Basic plan.)
+3. Store it as `DAYPEEK_FASTMAIL_PASSWORD` or Keychain `daypeek-fastmail`.
+4. Config: `url = "https://caldav.fastmail.com/"` and `username` = your full
+   Fastmail address.
+
+#### Nextcloud
+
+1. In Nextcloud, click your avatar → **Settings** → **Security**.
+2. Under **Devices & sessions**, type `daypeek` as the app name and click
+   **Create new app password**. Copy the password it shows.
+   ([Nextcloud manual](https://docs.nextcloud.com/server/latest/user_manual/en/session_management.html))
+3. Store it as `DAYPEEK_NEXTCLOUD_PASSWORD` or Keychain `daypeek-nextcloud`.
+4. Config: `url = "https://YOUR-SERVER/remote.php/dav"` (for example
+   `https://cloud.example.com/remote.php/dav`) and `username` = your Nextcloud
+   username.
+
+#### Other servers
+
+Most CalDAV servers (Radicale, Baïkal, SOGo, mailbox.org, Synology…) work the
+same way: use the server's CalDAV address as `url`. If discovery fails, point
+`url` straight at a single calendar's address. It's used as-is.
+
+✅ `daypeek providers` → `iCloud  CalDAV calendar  ✓ ok N events today`.
+A wrong password shows as `needs setup` with a hint, and the dashboard keeps
+working.
 
 ### Weather
 
