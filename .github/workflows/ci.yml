@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    # Weekly, so a new advisory against an unchanged lockfile still shows up.
+    - cron: "17 9 * * 1"
 
 jobs:
   ci:
@@ -34,6 +37,18 @@ jobs:
 
       - name: demo smoke test
         run: cargo run --release -- --demo --compact
+
+  audit:
+    # Known vulnerabilities in Cargo.lock (RustSec advisory database).
+    name: cargo audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - name: cargo audit
+        run: cargo audit --deny warnings
 
   release-targets:
     # The release workflow only runs on tags; build its extra targets on every

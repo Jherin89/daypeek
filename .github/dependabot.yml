@@ -1,0 +1,26 @@
+# Weekly dependency updates. Security updates arrive as soon as an advisory
+# is published (Settings → Code security → Dependabot security updates).
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      # One PR for every patch/minor bump instead of a dozen small ones.
+      cargo-minor:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: deps
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: ci
