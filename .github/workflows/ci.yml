@@ -18,9 +18,9 @@ jobs:
         # macos-14 is Apple Silicon: exercises the cfg(target_os = "macos") paths.
         os: [ubuntu-latest, macos-14]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: dtolnay/rust-toolchain@1.85.1
+      - uses: dtolnay/rust-toolchain@1.120.0
         with:
           components: rustfmt, clippy
 
@@ -43,7 +43,7 @@ jobs:
     name: cargo audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-audit
@@ -64,8 +64,8 @@ jobs:
           - target: x86_64-apple-darwin
             os: macos-14
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@1.85.1
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.120.0
         with:
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
@@ -94,7 +94,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-14]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: shellcheck
         if: runner.os == 'Linux'
         run: shellcheck -s sh install.sh
