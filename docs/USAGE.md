@@ -39,7 +39,7 @@ daypeek --init                # write a starter config
 | --- | --- |
 | `--compact` | A short summary: date, time, and weather; the current or next event; how many tasks are due and the most urgent one. Problems are flagged: `↻N` stale, `!N` failed, `○ todoist needs setup` for a source with no credential yet. With `week` it prints one line per day. |
 | `--json` | Prints the full snapshot as JSON on stdout (see [below](#json-output-and-jq)). There's no color and no task limit. |
-| `--demo` | Uses built-in fake data. Reads no config and makes no network calls. Combine it with `--compact`, `--json`, `tomorrow`, `week`, `providers`, or `setup`. |
+| `--demo` | Uses built-in fake data and makes no network calls. Dashboard formatting (such as time zone and task limit) still follows your config; configured sources are never fetched. Combine it with `--compact`, `--json`, `tomorrow`, `week`, `providers`, or `setup`. |
 | `--refresh` | Fetches every source now instead of reusing results from the last `cache_minutes` ([caching](#caching-why-its-instant)). |
 | `--watch` | Keeps the dashboard open and redraws it in place ([details](#--watch-a-live-dashboard)). Works with `today`, `tomorrow`, `week` and `--compact`; not with `--json`. |
 | `--every <SECS>` | With `--watch`: seconds between redraws (default 60, minimum 2). |
@@ -243,9 +243,11 @@ Other apps (Linear, Asana, Trello, Notion, files…) stay read-only.
    ```
 
 2. `daypeek done 2` completes the task numbered **2 the last time the dashboard
-   was drawn**, so the number always matches what you saw (even if a task was
-   added since). The numbers last until midnight; otherwise, or if you haven't
-   run `daypeek` yet, it fetches fresh and uses those numbers.
+   was drawn**, so the number matches what you saw (even if a task was
+   added since). An empty dashboard clears the old numbers, so they cannot
+   complete a task from an earlier screen. The numbers last until midnight;
+   otherwise, or if you haven't run `daypeek` yet, it fetches fresh and uses
+   those numbers.
 3. It shows the task and asks `Complete "Call the dentist" in TickTick? [y/N]`.
    `--yes` (`-y`) skips the question; without a terminal you must pass `--yes`.
 4. If the same task appears in two writable apps (duplicates are merged on the
@@ -257,6 +259,12 @@ Other apps (Linear, Asana, Trello, Notion, files…) stay read-only.
 `daypeek --demo done 2` shows what would happen with the demo data.
 
 ## Caching: why it's instant
+
+Each config path and its contents has its own opaque `profile-<digest>/` folder
+under the cache directory, including task numbers. Work and personal configs
+do not share data, even with the same provider IDs or explicit `cache_dir`.
+Changing a config starts a new cache; old unscoped cache files are ignored.
+The first run after upgrading fetches fresh data (offline mode needs a new cache).
 
 Opening five terminals in a minute shouldn't call five APIs five times. Each
 cloud source (calendar feeds, Todoist and the other web apps, weather) is
@@ -458,7 +466,7 @@ results ([caching](#caching-why-its-instant)). For zero waiting even then, use
 [setup step 5](SETUP.md#5-run-it-when-a-terminal-opens)), or lower `timeout_secs`.
 
 **Can it mark tasks done?**
-No. `daypeek` is read-only on purpose. Badges tell you which app to open.
+Yes, for Todoist and TickTick after you enable `allow_write = true`. Run `daypeek`, then `daypeek done <n>` using the displayed number; it asks before completing the task. TickTick needs a new sign-in for write permission. See [Completing tasks](#completing-tasks).
 
 **Does it work on Windows?**
 It isn't tested or released for Windows. The cross-platform providers may build
@@ -484,5 +492,5 @@ there, but there are no promises yet.
   (`geocoding-api.open-meteo.com` and `api.open-meteo.com`) with your city name or
   coordinates. That's all. There's no telemetry, analytics, or update check.
 - **Local data** (Things, Reminders, Obsidian, files) never leaves your machine.
-- **Cache:** `~/.cache/daypeek/` holds the last good result per source, readable
+- **Cache:** `~/.cache/daypeek/` holds the last good result per source and config profile, readable
   only by your user. Delete it any time.

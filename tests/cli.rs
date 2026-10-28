@@ -540,3 +540,29 @@ fn demo_done_changes_nothing() {
     assert!(!ok);
     assert!(err.contains("99"), "{err}");
 }
+
+#[test]
+fn empty_dashboard_replaces_previous_numbers_before_done() {
+    let dir = fixture_config("[providers.todoist]\nallow_write = true\n");
+    let path = dir.path().join("config.toml");
+    let cfg = daypeek::config::Config::load(&path).unwrap();
+    let cache = daypeek::cache::Cache::new(cfg.scoped_cache_dir(&path), false);
+    daypeek::done::save(
+        &cache,
+        &[daypeek::done::Numbered {
+            n: 1,
+            title: "Old fake task".into(),
+            refs: vec![],
+            sources: vec!["todoist".into()],
+        }],
+    );
+    let (ok, _, err) = run(&["--config", path.to_str().unwrap(), "--offline"]);
+    assert!(ok, "{err}");
+    let (ok, _, err) = run(&["--config", path.to_str().unwrap(), "done", "1", "--yes"]);
+    assert!(!ok);
+    assert!(err.contains("no numbered tasks right now"), "{err}");
+    assert!(
+        !err.contains("Old fake task"),
+        "must not use the previous screen"
+    );
+}

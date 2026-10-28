@@ -141,7 +141,9 @@ daypeek --demo --json       # machine-readable
 daypeek --demo providers    # what the health check looks like
 ```
 
-None of these read your config or touch the network.
+These use fake data and never fetch your configured sources. Dashboard formatting
+(such as time zone and task limit) still follows your config; `--demo setup`
+saves nothing.
 
 ## 3. Run the setup wizard
 
@@ -209,6 +211,12 @@ readable only by you. If a config already exists, `--init` refuses to
 overwrite it unless you add `--force` (the old one is kept as `config.toml.bak`).
 The `--config <path>` flag or the `DAYPEEK_CONFIG` env var point `daypeek` at a
 different file. `$XDG_CONFIG_HOME` is also honored.
+
+Each config path and its contents gets a separate cache and saved task numbers,
+including when you set `general.cache_dir`. Switching profiles cannot show the
+other profile's cached tasks or events. Editing a config starts a fresh cache.
+After this upgrade, run online once before relying on `--offline`; old cache
+files are ignored.
 
 Every section is optional. A complete example:
 

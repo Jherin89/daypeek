@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Empty dashboards and completing the last numbered task now save an empty
+  numbered list, preventing `done` from reusing an earlier screen's numbers.
+- Cached sources and completion numbers are isolated by config path and
+  contents, even with a shared cache directory. Old unscoped cache files are
+  ignored; run online once to populate the new cache before using offline mode.
+- Usage FAQ now documents opt-in completion, demo docs explain config-based
+  formatting, and the README clarifies outstanding real-service validation.
+
 ## [0.3.0] - 2026-10-23
 
 ### Added

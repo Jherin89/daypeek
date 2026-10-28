@@ -58,17 +58,15 @@ pub fn number(s: &Snapshot, max_tasks: usize) -> Vec<Numbered> {
         .collect()
 }
 
-/// Remember the numbers just drawn (nothing is saved when there are none).
+/// Remember the numbers just drawn, including an explicitly empty dashboard.
 pub fn save(cache: &Cache, list: &[Numbered]) {
-    if !list.is_empty() {
-        cache.store(SAVED_KEY, &list);
-    }
+    cache.store(SAVED_KEY, &list);
 }
 
 /// The last numbered list, if it was drawn after `not_before` (today).
 pub fn load(cache: &Cache, not_before: DateTime<Utc>) -> Option<Vec<Numbered>> {
     let (at, list) = cache.load::<Vec<Numbered>>(SAVED_KEY)?;
-    (at >= not_before && !list.is_empty()).then_some(list)
+    (at >= not_before).then_some(list)
 }
 
 /// Find task `n`, or explain which numbers exist.
@@ -153,11 +151,7 @@ pub fn complete(
 /// After completing `n`, keep the other numbers as they were on screen.
 pub fn forget_number(cache: &Cache, list: &[Numbered], n: usize) {
     let rest: Vec<Numbered> = list.iter().filter(|t| t.n != n).cloned().collect();
-    if rest.is_empty() {
-        cache.forget(SAVED_KEY);
-    } else {
-        cache.store(SAVED_KEY, &rest);
-    }
+    save(cache, &rest);
 }
 
 #[cfg(test)]
@@ -237,6 +231,21 @@ mod tests {
         forget_number(&cache, &list, 1);
         let rest = load(&cache, earlier).unwrap();
         assert_eq!(rest[0].n, 2, "the others keep their numbers");
+    }
+
+    #[test]
+    fn empty_dashboard_and_last_completion_keep_an_empty_numbered_list() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache = Cache::new(Some(dir.path().to_path_buf()), false);
+        let earlier = Utc::now() - chrono::Duration::hours(1);
+        let list = number(&demo_writable(), 15);
+        save(&cache, &list);
+        save(&cache, &[]);
+        assert_eq!(load(&cache, earlier), Some(vec![]));
+        assert!(pick(&load(&cache, earlier).unwrap(), 1).is_err());
+        save(&cache, &list[..1]);
+        forget_number(&cache, &list[..1], 1);
+        assert_eq!(load(&cache, earlier), Some(vec![]));
     }
 
     #[test]

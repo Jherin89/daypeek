@@ -216,6 +216,21 @@ impl Config {
         }
     }
 
+    /// Isolate cached data and task numbers by config path and contents.
+    /// Only an opaque digest is used on disk, never config values or secrets.
+    pub fn scoped_cache_dir(&self, path: &Path) -> Option<PathBuf> {
+        use sha2::{Digest, Sha256};
+        let path = path
+            .canonicalize()
+            .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default().join(path));
+        let mut digest = Sha256::new();
+        digest.update(path.as_os_str().as_encoded_bytes());
+        digest.update([0]);
+        digest.update(serde_json::to_vec(self).ok()?);
+        self.cache_dir()
+            .map(|base| base.join(format!("profile-{:x}", digest.finalize())))
+    }
+
     /// Weather settings, if weather is configured and enabled.
     pub fn weather(&self) -> Option<&WeatherConfig> {
         self.weather.as_ref().filter(|w| {
@@ -492,5 +507,33 @@ mod tests {
             assert_eq!(expand_tilde("~/x/y"), h.join("x/y"));
         }
         assert_eq!(expand_tilde("/abs"), PathBuf::from("/abs"));
+    }
+
+    #[test]
+    fn profiles_isolate_data_and_numbers_even_with_a_shared_cache_root() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut cfg = Config::default();
+        cfg.general.cache_dir = Some(dir.path().display().to_string());
+        let work = dir.path().join("work.toml");
+        let personal = dir.path().join("personal.toml");
+        let work_cache = crate::cache::Cache::new(cfg.scoped_cache_dir(&work), false);
+        let personal_cache = crate::cache::Cache::new(cfg.scoped_cache_dir(&personal), false);
+        work_cache.store("calendar-Calendar", &"fake work event");
+        work_cache.store(crate::done::SAVED_KEY, &vec![1]);
+        assert!(personal_cache.load::<String>("calendar-Calendar").is_none());
+        assert!(personal_cache
+            .load::<Vec<i32>>(crate::done::SAVED_KEY)
+            .is_none());
+        assert_eq!(cfg.scoped_cache_dir(&work), cfg.scoped_cache_dir(&work));
+        let original = cfg.scoped_cache_dir(&work);
+        cfg.weather = Some(WeatherConfig {
+            city: Some("Oslo".into()),
+            ..WeatherConfig::default()
+        });
+        assert_ne!(
+            original,
+            cfg.scoped_cache_dir(&work),
+            "config edits invalidate old data"
+        );
     }
 }

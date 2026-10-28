@@ -10,7 +10,7 @@ Calendar, tasks from 13 apps, and weather in one command that prints in millisec
 [![Rust 1.85+](https://img.shields.io/badge/rust-1.85%2B-orange.svg?logo=rust)](https://www.rust-lang.org)
 [![Platform: macOS | Linux](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey.svg)](#get-started-in-60-seconds)
 
-<img src="docs/demo.gif" alt="Typing daypeek --demo --compact, then daypeek --demo: today's calendar, merged tasks, weather, and a daily note" width="760">
+<img src="docs/demo.gif" alt="Demo compact view, then today's calendar, merged tasks, weather, and a daily note" width="760">
 
 </div>
 
@@ -311,6 +311,10 @@ Where to find each calendar's link: [Calendars guide →](docs/SETUP.md#calendar
 
 Missing one? [Request it](https://github.com/Jherin89/daypeek/issues/new?template=new_provider.yml), or [add it](CONTRIBUTING.md): each provider is a single file.
 
+Separate work and personal configs (`--config`) keep independent cached data and
+task numbers, even if they use the same app names. Empty task lists clear old
+completion numbers. See the [usage guide](docs/USAGE.md#caching-why-its-instant).
+
 ## Learn more
 
 | | |
@@ -331,7 +335,7 @@ config.toml ─┬─ calendars ─► fetch .ics ─► parse VEVENTs ─► ex
      every source goes through the cache: cached (< 5 min) ▸ live ▸ stale ▸ failed
 ```
 
-Every source is fetched in parallel with plain threads and a hard timeout. There's no async runtime. A run takes about 0.1–0.5 s when it fetches, and about 5 ms when it reuses results from the last `cache_minutes` (default 5), runs `--offline`, or runs `--demo`. Cloud providers are tested against recorded fixtures, and CI runs on Ubuntu and on macOS (Apple Silicon).
+Every source is fetched in parallel with plain threads and a hard timeout. There's no async runtime. A run takes about 0.1–0.5 s when it fetches, and about 5 ms when it reuses results from the last `cache_minutes` (default 5), runs `--offline`, or runs `--demo`. Cloud providers are tested against fixtures and local mock servers, and CI runs on Ubuntu and on macOS (Apple Silicon).
 
 ```sh
 cargo test && cargo run -- --demo
@@ -339,6 +343,11 @@ python3 scripts/screenshot.py && vhs docs/demo.tape && vhs docs/setup.tape   # r
 ```
 
 </details>
+
+Real-account checks for CalDAV, Linear, Asana, Trello and task completion, plus
+Mac checks for detection, Reminders, Keychain and terminal watch behavior,
+remain outstanding; automated checks do not establish those integrations work
+with real accounts.
 
 ## License
 

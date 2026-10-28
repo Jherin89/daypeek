@@ -197,6 +197,10 @@ fn run(cli: Cli) -> Result<(), String> {
         }
     }
 
+    if !cli.demo {
+        cfg.general.cache_dir = cfg.scoped_cache_dir(&path).map(|p| p.display().to_string());
+    }
+
     if cli.watch
         && matches!(
             cli.command,
@@ -323,7 +327,7 @@ fn style_for(cfg: &Config, width: usize) -> Style {
 
 /// Remember the numbers just drawn, for `daypeek done <n>`.
 fn remember_numbers(cfg: &Config, snap: &Snapshot, style: &Style) {
-    if !snap.demo && !snap.writable.is_empty() {
+    if !snap.demo {
         let list = done::number(snap, style.max_tasks);
         done::save(&Cache::new(cfg.cache_dir(), false), &list);
     }
@@ -547,7 +551,8 @@ fn setup_cmd(path: PathBuf, demo: bool, port: u16) -> Result<(), String> {
             demo::provider_rows_for(&answers)
         }
         Outcome::Written => {
-            let cfg = Config::load(&path).map_err(|e| format!("config: {e}"))?;
+            let mut cfg = Config::load(&path).map_err(|e| format!("config: {e}"))?;
+            cfg.general.cache_dir = cfg.scoped_cache_dir(&path).map(|p| p.display().to_string());
             if cfg.calendars.is_empty() && cfg.providers.is_empty() && cfg.weather().is_none() {
                 nothing_configured();
                 return Ok(());
