@@ -24,7 +24,7 @@ jobs:
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: dtolnay/rust-toolchain@1.85.1
         with:
